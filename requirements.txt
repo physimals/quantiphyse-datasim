@@ -1,0 +1,2 @@
+numpy
+quantiphyse-fabber

@@ -1,0 +1,4 @@
+include LICENSE requirements.txt
+recursive-include quantiphyse_perfsim *.png *.svg
+
+
