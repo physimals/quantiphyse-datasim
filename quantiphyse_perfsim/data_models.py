@@ -21,23 +21,32 @@ from fabber import Fabber
 
 from quantiphyse.data import NumpyData
 from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption
-from quantiphyse.utils import get_plugins
+from quantiphyse.utils import get_plugins, QpException
 
 from .model import Model, Parameter
 
-def get_data_model(name):
-    if name == "asl":
-        return AslDataModel
-    else:
-        raise QpException("Unknown data model: %s" % name)
-        
-class AslDataModel(Model):
+def get_data_models():
+    ret = {}
+    for cls in get_plugins("perfsim-data-models"):
+        ret[cls.NAME] = cls
+    return ret
+
+class DataModel(Model):
+    """
+    """
+
+    def get_timeseries(self, param_values):
+        raise NotImplementedError()
+
+class AslDataModel(DataModel):
     """
     Generates simulated ASL data
     """
+    NAME = "asl"
+    
     def __init__(self, ivm):
-        Model.__init__(self, ivm, "asl", "Arterial Spin Labelling")
-        self.gui = OptionBox()
+        DataModel.__init__(self, ivm, "Arterial Spin Labelling")
+        self.gui.add("Bolus duration", NumericOption(minval=0, maxval=5, default=1.8), key="tau")
         self.gui.add("PLDs", NumberListOption(), key="plds")
 
     @property
@@ -47,42 +56,58 @@ class AslDataModel(Model):
             Parameter("delttiss", "ATT", default=1.3, units="s"),
         ]
 
+    def get_timeseries(self, param_values):
+        from fabber import Fabber
+        search_dirs = get_plugins(key="fabber-dirs")
+        fab = Fabber(*search_dirs)
+
+        plds = self.options.get("plds", [1.0])
+        fab_options = {
+            "model" : "aslrest",
+            "casl" : True,
+            "inctiss" : True,
+            "incbat" : True,
+        }
+        for idx, pld in enumerate(plds):
+            fab_options["pld%i" % (idx+1)] = pld
+        fab_options.update(self.options)
+
+        print(fab_options, param_values)
+        return fab.model_evaluate(fab_options, param_values, len(plds))
+           
+class DscDataModel(DataModel):
+    """
+    Generates simulated DSC data
+    """
+    NAME = "dsc"
+    
+    def __init__(self, ivm):
+        Model.__init__(self, ivm, "Dynamic Susceptibility Contrast")
+        self.gui = OptionBox()
+        self.gui.add("Time between volumes (s)", NumericOption(minval=0, maxval=5, default=1.0), key="tr")
+        self.gui.add("TE (s)", NumericOption(minval=0, maxval=5, default=1.0), key="te")
+        self.gui.add("AIF", NumberListOption(), key="aif")
+
+    @property
+    def params(self):
+        return [
+        ]
+
     @property
     def options(self):
         print("options: ", self.gui.values())
         return self.gui.values()
 
     @staticmethod
-    def generate_data(options, param_values, pv_maps):
+    def get_timeseries(options, param_values):
         from fabber import Fabber
         search_dirs = get_plugins(key="fabber-dirs")
         fab = Fabber(*search_dirs)
 
-        plds = options["plds"]
         fab_options = {
-            "model" : "aslrest",
-            "casl" : True,
-            "tau" : 1.8,
-            "inctiss" : True,
-            "incbat" : True,
+            "model" : "dsc",
         }
-        for idx, pld in enumerate(plds):
-            fab_options["pld%i" % (idx+1)] = pld
+        fab_options.update(options)
 
-        output_data = None
-        for name, pv_map in pv_maps.items():
-            print("Generating data for ", name)
-            if output_data is None:
-                output_data = np.zeros(list(pv_map.grid.shape) + [len(plds)], dtype=np.float32)
-                output_grid = pv_map.grid
-                print("Created output data shape", output_data.shape)
-
-            struc_values = param_values[name]
-            print("struc values", struc_values)
-            timeseries = fab.model_evaluate(fab_options, struc_values, len(plds))
-            print("timeseries", timeseries)
-            struc_data = np.zeros(output_data.shape, dtype=np.float32)
-            struc_data = pv_map.raw()[..., np.newaxis] * timeseries
-            output_data += struc_data
-
-        return NumpyData(output_data, name="sim_data", grid=output_grid)
+        return fab.model_evaluate(fab_options, param_values, len(plds))
+           
