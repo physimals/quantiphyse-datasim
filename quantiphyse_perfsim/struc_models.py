@@ -10,6 +10,8 @@ Copyright (c) 2016-2017 University of Oxford, Martin Craig
 
 from __future__ import division, unicode_literals, absolute_import, print_function
 
+import time
+
 import numpy as np
 
 try:
@@ -17,9 +19,10 @@ try:
 except ImportError:
     from PySide2 import QtGui, QtCore, QtWidgets
 
-from quantiphyse.data import NumpyData, DataGrid
+from quantiphyse.data import NumpyData, DataGrid, ImageVolumeManagement
 from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption
 from quantiphyse.utils import QpException, get_plugins
+from quantiphyse.processes import Process
 
 from .model import Model, Parameter
 
@@ -127,6 +130,63 @@ class FslStdStructureModel(StructureModel):
         for idx, label in enumerate(atlas.labels):
             structure_maps[label.name] = fslimage_to_qpdata(atlas_map, vol=idx, name=label.name)
         return structure_maps
+
+class FastStructureModel(StructureModel):
+    """
+    Structural model which derives partial volume maps from a FAST segmentation
+    """
+    NAME = "fast"
+
+    def __init__(self, ivm):
+        StructureModel.__init__(self, ivm, "Partial volume maps from a FAST segmentation")
+        self.gui = OptionBox()
+        self.gui.add("Structural image (brain extracted)", DataOption(self.ivm, explicit=True), key="struc")
+        self.gui.add("Image type", ChoiceOption(["T1 weighted", "T2 weighted", "Proton Density"], return_values=[1, 2, 3]), key="type")
+        
+    @property
+    def structures(self):
+        return {
+            Parameter("gm", "Grey matter"),
+            Parameter("wm", "White matter"),
+            Parameter("csf", "CSF"),
+        }
+
+    def get_structure_maps(self):
+        processes = get_plugins("processes", "FastProcess")
+        if len(processes) != 1:
+            raise QpException("Can't identify Fast process")
+        
+        struc = self.options.get("struc", None)
+        if struc not in self.ivm.data:
+            raise QpException("Structural image not loaded: %s" % struc)
+        
+        qpdata = self.ivm.data[struc]
+        ivm = ImageVolumeManagement()
+        ivm.add(qpdata)
+        process = processes[0](ivm)
+        fast_options = {
+            "data" : qpdata.name,
+            "class" : 3,
+            "type" : self.options["type"],
+            "output-pve" : True,
+            "output-pveseg" : False,
+        }
+        process.execute(fast_options)
+        while process.status == Process.RUNNING:
+            time.sleep(1)
+
+        if process.status == Process.FAILED:
+            raise process.exception
+
+        # FIXME hack
+        process._complete()
+
+        options = self.options
+        return {
+            "gm" : ivm.data["%s_pve_1" % qpdata.name],
+            "wm" : ivm.data["%s_pve_2" % qpdata.name],
+            "csf" : ivm.data["%s_pve_0" % qpdata.name],
+        }
 
 class UserPvModel(StructureModel):
     """

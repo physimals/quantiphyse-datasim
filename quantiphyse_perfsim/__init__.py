@@ -19,5 +19,6 @@ QP_MANIFEST = {
         UserPvModel,
         CheckerboardModel,
         FslStdStructureModel,
+        FastStructureModel,
     ]
 }
