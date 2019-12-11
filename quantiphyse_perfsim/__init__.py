@@ -10,10 +10,15 @@ from .data_models import *
 from .struc_models import *
 
 QP_MANIFEST = {
-    "widgets" : [PerfSimWidget],
-    "processes" : [PerfSimProcess],
+    "widgets" : [
+        PerfSimWidget
+    ],
+    "processes" : [
+        PerfSimProcess
+    ],
     "perfsim-data-models" : [
-        AslDataModel, 
+        AslDataModel,
+        DscDataModel,
     ],
     "perfsim-struc-models" : [
         UserPvModel,

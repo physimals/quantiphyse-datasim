@@ -52,6 +52,10 @@ class AslDataModel(DataModel):
     
     def __init__(self, ivm):
         DataModel.__init__(self, ivm, "Arterial Spin Labelling")
+        from fabber import Fabber
+        search_dirs = get_plugins(key="fabber-dirs")
+        self._fab = Fabber(*search_dirs, debug=True)
+
         self.gui.add("Bolus duration", NumericOption(minval=0, maxval=5, default=1.8), key="tau")
         self.gui.add("Labelling", ChoiceOption(["CASL/pCASL", "PASL"], [True, False], default=True), key="casl")
         self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
@@ -63,23 +67,22 @@ class AslDataModel(DataModel):
             Parameter("delttiss", "ATT", default=1.3, units="s"),
         ]
 
-    def get_timeseries(self, param_values):
-        from fabber import Fabber
-        search_dirs = get_plugins(key="fabber-dirs")
-        fab = Fabber(*search_dirs)
-
-        plds = self.options.get("plds", [1.0])
+    @property
+    def fab_options(self):
         fab_options = {
             "model" : "aslrest",
             "inctiss" : True,
             "incbat" : True,
         }
+        plds = self.options.get("plds", [1.0])
         for idx, pld in enumerate(plds):
             fab_options["pld%i" % (idx+1)] = pld
         fab_options.update(self.options)
+        return fab_options
 
-        print(fab_options, param_values)
-        return fab.model_evaluate(fab_options, param_values, len(plds))
+    def get_timeseries(self, param_values):
+        nt = len(self.options.get("plds", [1.0]))
+        return self._fab.model_evaluate(self.fab_options, param_values, nt)
            
 class DscDataModel(DataModel):
     """
@@ -89,26 +92,37 @@ class DscDataModel(DataModel):
     
     def __init__(self, ivm):
         Model.__init__(self, ivm, "Dynamic Susceptibility Contrast")
+
+        from fabber import Fabber
+        search_dirs = get_plugins(key="fabber-dirs")
+        self._fab = Fabber(*search_dirs, debug=True)
+
         self.gui = OptionBox()
-        self.gui.add("Time between volumes (s)", NumericOption(minval=0, maxval=5, default=1.0), key="tr")
+        self.gui.add("Time between volumes (s)", NumericOption(minval=0, maxval=5, default=1.0), key="delt")
         self.gui.add("TE (s)", NumericOption(minval=0, maxval=5, default=1.0), key="te")
         self.gui.add("AIF", NumberListOption(), key="aif")
 
     @property
     def params(self):
-        return [
+        model_params = self._fab.get_model_params(self.fab_options)
+        known_params = [
+            Parameter("sig0", "Signal offset", default=100.0),
+            Parameter("cbf", "CBF", default=10.0),
         ]
+        return [param for param in known_params if param.name in model_params]
 
-    @staticmethod
-    def get_timeseries(options, param_values):
-        from fabber import Fabber
-        search_dirs = get_plugins(key="fabber-dirs")
-        fab = Fabber(*search_dirs)
-
+    @property
+    def fab_options(self):
         fab_options = {
             "model" : "dsc",
         }
-        fab_options.update(options)
+        fab_options.update(self.options)
+        print(fab_options)
+        # Model expects time resolution in minutes
+        fab_options["delt"] = float(fab_options["delt"]) / 60.0
+        return fab_options
 
-        return fab.model_evaluate(fab_options, param_values, len(plds))
-           
+    def get_timeseries(self, param_values):
+        # AIF defines number of time points
+        nt = len(self.options["aif"])
+        return self._fab.model_evaluate(self.fab_options, param_values, nt)
