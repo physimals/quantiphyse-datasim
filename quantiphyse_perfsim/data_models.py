@@ -2,7 +2,7 @@
 Perfusion simulation Quantiphyse plugin
 
 Data models, i.e. classes which generated simulated data for different
-modalities
+types of imaging
 
 Author: Martin Craig <martin.craig@eng.ox.ac.uk>
 Copyright (c) 2016-2017 University of Oxford, Martin Craig
@@ -33,6 +33,10 @@ def get_data_models():
 
 class DataModel(Model):
     """
+    Implements a model for producing simulated data
+
+    A data model has the ability to generate timeseries data from a dictionary
+    of parameter values.
     """
 
     def get_timeseries(self, param_values):
@@ -40,14 +44,17 @@ class DataModel(Model):
 
 class AslDataModel(DataModel):
     """
-    Generates simulated ASL data
+    Generates simulated ASL data using Fabber
+
+    This uses the resting-state ASL model 'aslrest'
     """
     NAME = "asl"
     
     def __init__(self, ivm):
         DataModel.__init__(self, ivm, "Arterial Spin Labelling")
         self.gui.add("Bolus duration", NumericOption(minval=0, maxval=5, default=1.8), key="tau")
-        self.gui.add("PLDs", NumberListOption(), key="plds")
+        self.gui.add("Labelling", ChoiceOption(["CASL/pCASL", "PASL"], [True, False], default=True), key="casl")
+        self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
 
     @property
     def params(self):
@@ -64,7 +71,6 @@ class AslDataModel(DataModel):
         plds = self.options.get("plds", [1.0])
         fab_options = {
             "model" : "aslrest",
-            "casl" : True,
             "inctiss" : True,
             "incbat" : True,
         }
@@ -92,11 +98,6 @@ class DscDataModel(DataModel):
     def params(self):
         return [
         ]
-
-    @property
-    def options(self):
-        print("options: ", self.gui.values())
-        return self.gui.values()
 
     @staticmethod
     def get_timeseries(options, param_values):
