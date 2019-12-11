@@ -60,9 +60,9 @@ class PerfSimProcess(Process):
         if noise > 0:
             noise_std = np.mean(clean_data.raw()) * float(noise) / 100 
             random_noise = np.random.normal(0, noise_std, clean_data.raw().shape)
-            noisy_data = NumpyData(clean_data.raw() + random_noise, grid=clean_data.grid, name="sim_data_noisy")
+            noisy_data = NumpyData(clean_data.raw() + random_noise, grid=clean_data.grid, name="sim_data")
             self.ivm.add(noisy_data, make_current=True)
             if options.pop("output-clean", False):
-                self.ivm.add(clean_data, name="sim_data_clean", make_current=True)
+                self.ivm.add(clean_data, name="sim_data_clean", make_current=False)
         else:
             self.ivm.add(clean_data, name="sim_data", make_current=True)
