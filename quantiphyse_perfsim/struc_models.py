@@ -34,7 +34,7 @@ def get_struc_models():
 
 class StructureModel(Model):
 
-    def get_simulated_data(self, data_model, param_values):
+    def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         """
         Generic function to generate test data from a set of
         partial volume maps, a dictionary of parameter values 
@@ -45,12 +45,10 @@ class StructureModel(Model):
         """
         pv_maps = self.get_structure_maps()
 
-        output_data = None
+        output_data = None 
         for name, pv_map in pv_maps.items():
-            print("Generating data for ", name)
             
             struc_values = param_values[name]
-            print("struc values", struc_values)
 
             # Check that there is exactly one parameter value per structure
             single_values = {}
@@ -58,21 +56,33 @@ class StructureModel(Model):
                 if isinstance(v, (float, int)):
                     v = [v]
                 if len(v) != 1:
-                    print(v)
                     raise QpException("This structure model cannot handle multiple parameter values in a single structure")
                 single_values[k] = v[0]
 
             timeseries = data_model.get_timeseries(single_values)
-            print("timeseries", timeseries)
             if output_data is None:
                 output_data = np.zeros(list(pv_map.grid.shape) + [len(timeseries)], dtype=np.float32)
                 output_grid = pv_map.grid
-                print("Created output data shape", output_data.shape)
+                if output_param_maps:
+                    param_maps = {}
+                    for param in struc_values:
+                        param_maps[param] = np.zeros(pv_map.grid.shape, dtype=np.float32)
 
             struc_data = pv_map.raw()[..., np.newaxis] * timeseries
             output_data += struc_data
 
-        return NumpyData(output_data, grid=output_grid, name="sim_data")
+            if output_param_maps:
+                for param, value in single_values.items():
+                    param_maps[param] += pv_map.raw() * value
+
+        sim_data = NumpyData(output_data, grid=output_grid, name="sim_data")
+
+        if output_param_maps:
+            for param in struc_values: 
+                param_maps[param] = NumpyData(param_maps[param], grid=output_grid, name=param)
+            return sim_data, param_maps
+        else:
+            return sim_data
 
     def get_structure_maps(self):
         raise NotImplementedError()
@@ -120,7 +130,6 @@ class FslStdStructureModel(StructureModel):
         structures = []
         for label in atlas.labels:
             structures.append(Parameter(label.name, label.name))
-            print(dir(label))
         return structures
 
     def get_structure_maps(self):
@@ -239,13 +248,13 @@ class CheckerboardModel(StructureModel):
             Parameter("data", "Sequence of test values"),
         }
 
-    def get_simulated_data(self, data_model, param_values):
-        varying_params = []
+    def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         if len(param_values) != 1:
             raise QpException("Can only have a single structure in the checkerboard model")
         param_values = list(param_values.values())[0]
 
         param_values_list = {}
+        varying_params = []
         for param, values in param_values.items():
             if isinstance(values, (int, float)):
                 values = [values]
@@ -265,7 +274,6 @@ class CheckerboardModel(StructureModel):
         patch_dims = [side_length] * num_varying_params
         while len(patch_dims) < 3:
             patch_dims += [1,]
-        print("Dimensions of patch: ", patch_dims)
 
         repeats = [[0], [0], [0]]
         checkerboard_dims = []
@@ -275,27 +283,37 @@ class CheckerboardModel(StructureModel):
             checkerboard_dims.append(patch_dims[idx] * num_values)
         for idx in range(len(varying_params), 3):
             checkerboard_dims.append(patch_dims[idx])
-        print("Dimensions of checkerboard: ", checkerboard_dims)
 
         output_data = None
         import itertools
         for indexes in itertools.product(*repeats):
-            print(indexes)
             patch_values = dict(param_values)
             for idx, param in enumerate(varying_params):
                 patch_values[param] = patch_values[param][indexes[idx]]
             
             timeseries = data_model.get_timeseries(patch_values)
-            print("timeseries", timeseries)
             if output_data is None:
                 output_data = np.zeros(list(checkerboard_dims) + [len(timeseries)], dtype=np.float32)
-                print("Created output data shape", output_data.shape)
+                if output_param_maps:
+                    param_maps = {}
+                    for param in param_values:
+                        param_maps[param] = np.zeros(checkerboard_dims, dtype=np.float32)
 
             slices = []
             for dim_idx, patch_idx in enumerate(indexes):
                 dim_length = patch_dims[dim_idx]
                 slices.append(slice(patch_idx*dim_length, (patch_idx+1)*dim_length))
-            print(slices)
             output_data[slices] = timeseries
+            if output_param_maps:
+                for param, value in patch_values.items():
+                    param_maps[param][slices] = value
 
-        return NumpyData(output_data, grid=DataGrid(checkerboard_dims, np.identity(4)), name="sim_data")
+        grid = DataGrid(checkerboard_dims, np.identity(4))
+        sim_data = NumpyData(output_data, grid=grid, name="sim_data")
+
+        if output_param_maps:
+            for param in param_values: 
+                param_maps[param] = NumpyData(param_maps[param], grid=grid, name=param)
+            return sim_data, param_maps
+        else:
+            return sim_data

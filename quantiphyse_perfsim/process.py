@@ -38,7 +38,6 @@ class PerfSimProcess(Process):
         data_model = data_model(self.ivm)
 
         data_model_options = options.get("data-model-options", {})
-        print(data_model_options)
         data_model.options = data_model_options
 
         struc_model_name = options.pop("struc-model", None)
@@ -53,16 +52,25 @@ class PerfSimProcess(Process):
         struc_model.options = struc_model_options
 
         param_values = options.get("param-values", {})
-        print("param_values", param_values)
-        clean_data = struc_model.get_simulated_data(data_model, param_values)
+        output_param_maps = options.pop("output-param-maps", False)
+        ret = struc_model.get_simulated_data(data_model, param_values, output_param_maps=output_param_maps)
+        if output_param_maps:
+            clean_data, param_maps = ret
+        else:
+            clean_data, param_maps = ret, {}
 
+        output_name = options.pop("output", "sim_data")
         noise = options.pop("noise-percent", 0)
         if noise > 0:
             noise_std = np.mean(clean_data.raw()) * float(noise) / 100 
             random_noise = np.random.normal(0, noise_std, clean_data.raw().shape)
-            noisy_data = NumpyData(clean_data.raw() + random_noise, grid=clean_data.grid, name="sim_data")
+            noisy_data = NumpyData(clean_data.raw() + random_noise, grid=clean_data.grid, name=output_name)
             self.ivm.add(noisy_data, make_current=True)
-            if options.pop("output-clean", False):
-                self.ivm.add(clean_data, name="sim_data_clean", make_current=False)
+            output_clean = options.pop("output-clean", None)
+            if output_clean:
+                self.ivm.add(clean_data, name=output_clean, make_current=False)
         else:
-            self.ivm.add(clean_data, name="sim_data", make_current=True)
+            self.ivm.add(clean_data, name=output_name, make_current=True)
+
+        for param, qpdata in param_maps.items():
+            self.ivm.add(qpdata, name=param, make_current=False)

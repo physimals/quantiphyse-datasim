@@ -65,7 +65,6 @@ class ParamValuesGrid(QtGui.QGroupBox):
         Mapping from structure name to another mapping from param name
         to parameter value(s) in that structure
         """
-        print("params map: structure=", self._structures)
         ret = {}
         for structure_idx, structure in enumerate(self._structures):
             if structure.name not in self._values:
@@ -95,6 +94,8 @@ class ParamValuesGrid(QtGui.QGroupBox):
                     initial = self._values[structure.name][param.name]
                 else:
                     initial = [param.kwargs.get("default", 0.0)]
+                if isinstance(initial, (int, float)):
+                    initial = [initial]
                 self._grid.addWidget(NumberListOption(initial=initial,
                                                       intonly=param.kwargs.get("intonly", False),
                                                       load_btn=False), param_idx + 1, structure_idx + 1)
@@ -119,6 +120,7 @@ class PerfSimWidget(QpWidget):
             self._struc_models[name] = cls(self.ivm)
         for name, cls in get_data_models().items():
             self._data_models[name] = cls(self.ivm)
+            self._data_models[name].gui.sig_changed.connect(self._data_model_changed)
     
     def init_ui(self):
         main_vbox = QtGui.QVBoxLayout()
@@ -134,7 +136,9 @@ class PerfSimWidget(QpWidget):
         self._optbox.add("Structural model", ChoiceOption([m.display_name for m in self._struc_models.values()], self._struc_models.keys()), key="struc-model")
         self._optbox.add("Data model", ChoiceOption([m.display_name for m in self._data_models.values()], self._data_models.keys()), key="data-model")
         self._optbox.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="noise-percent")
-        self._optbox.add("Also output clean data", TextOption("sim-data-clean"), checked=True, default=True, key="output-clean")
+        self._optbox.add("Output name", TextOption("sim_data"), key="output")
+        self._optbox.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
+        self._optbox.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
         self._optbox.option("struc-model").sig_changed.connect(self._struc_model_changed)
         self._optbox.option("data-model").sig_changed.connect(self._data_model_changed)
         self._optbox.option("noise-percent").sig_changed.connect(self._noise_changed)
@@ -182,17 +186,13 @@ class PerfSimWidget(QpWidget):
 
     def _struc_model_changed(self):
         struc_model = self._struc_models[self._optbox.option("struc-model").value]
-        print("struc model", struc_model.NAME)
         for name, gui in self.struc_model_guis.items():
-            print(name, struc_model.NAME)
             gui.setVisible(struc_model.NAME == name)
         self._params.structures = struc_model.structures
         
     def _data_model_changed(self):
         data_model = self._data_models[self._optbox.option("data-model").value]
-        print("data model", data_model.NAME)
         for name, gui in self.data_model_guis.items():
-            print(name, data_model.NAME)
             gui.setVisible(data_model.NAME == name)
         self._params.params = data_model.params
 
@@ -207,7 +207,6 @@ class PerfSimWidget(QpWidget):
         opts["struc-model-options"] = struc_model.options
         opts["data-model-options"] = data_model.options
         opts["param-values"] = self._params.values
-        print(opts)
 
         processes = [
             {"PerfSim" : opts}
