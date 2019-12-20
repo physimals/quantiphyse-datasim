@@ -19,6 +19,7 @@ QP_MANIFEST = {
     "perfsim-data-models" : [
         AslDataModel,
         DscDataModel,
+        DceDataModel,
     ],
     "perfsim-struc-models" : [
         UserPvModel,
