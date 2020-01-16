@@ -52,7 +52,7 @@ class FabberDataModel(DataModel):
         DataModel.__init__(self, ivm, title)
         from fabber import Fabber
         search_dirs = get_plugins(key="fabber-dirs")
-        self._fab = Fabber(*search_dirs, debug=True)
+        self._fab = Fabber(*search_dirs)
         self.known_params = []
 
     @property
@@ -119,7 +119,7 @@ class DscDataModel(FabberDataModel):
 
         self.gui.add("Time between volumes (s)", NumericOption(minval=0, maxval=5, default=1.0), key="delt")
         self.gui.add("TE (s)", NumericOption(minval=0, maxval=5, default=1.0), key="te")
-        self.gui.add("AIF", NumberListOption(extras_btn=True, ivm=self.ivm), key="aif")
+        self.gui.add("AIF", NumberListOption(), key="aif")
 
         self.known_params = [
             Parameter("sig0", "Signal offset", default=100.0),
@@ -152,7 +152,7 @@ class DceDataModel(FabberDataModel):
         
         from fabber import Fabber
         search_dirs = get_plugins(key="fabber-dirs")
-        self._fab = Fabber(*search_dirs, debug=True)
+        self._fab = Fabber(*search_dirs)
 
         self.gui = OptionBox()
         self.gui.add("Model", ChoiceOption(["Standard Tofts model",

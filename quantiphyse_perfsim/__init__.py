@@ -24,7 +24,7 @@ QP_MANIFEST = {
     "perfsim-struc-models" : [
         UserPvModel,
         CheckerboardModel,
-        FslStdStructureModel,
+        #FslStdStructureModel,
         FastStructureModel,
     ]
 }

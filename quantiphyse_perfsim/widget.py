@@ -12,7 +12,7 @@ try:
 except ImportError:
     from PySide2 import QtGui, QtCore, QtWidgets
 
-from quantiphyse.gui.widgets import QpWidget, Citation, TitleWidget, RunWidget
+from quantiphyse.gui.widgets import QpWidget, Citation, TitleWidget, RunWidget, WarningBox
 from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption
 
 from ._version import __version__
@@ -128,6 +128,8 @@ class PerfSimWidget(QpWidget):
 
         title = TitleWidget(self, help="perfsim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
         main_vbox.addWidget(title)
+
+        main_vbox.addWidget(WarningBox("Pre-release - not fully functional"))
 
         #cite = Citation(FAB_CITE_TITLE, FAB_CITE_AUTHOR, FAB_CITE_JOURNAL)
         #main_vbox.addWidget(cite)
