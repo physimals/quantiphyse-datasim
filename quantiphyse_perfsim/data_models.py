@@ -222,12 +222,14 @@ class DceDataModel(FabberDataModel):
         fab_options["tr"] = fab_options["tr"] / 1000
 
         # NT is not a Fabber option, it is handled separately
-        fab_options.pop("nt")
+        fab_options.pop("nt", None)
+        if "aif-data" not in fab_options:
+            fab_options["aif-data"] = [1.0]
 
         return fab_options
 
     @property
     def nt(self):
-        return self.options["nt"]
+        return self.options.get("nt", len(self.options.get("aif-data", [1])))
          
          
