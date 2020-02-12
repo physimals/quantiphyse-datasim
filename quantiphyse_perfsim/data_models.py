@@ -10,6 +10,8 @@ Copyright (c) 2016-2017 University of Oxford, Martin Craig
 
 from __future__ import division, unicode_literals, absolute_import, print_function
 
+import logging
+
 try:
     from PySide import QtGui, QtCore, QtGui as QtWidgets
 except ImportError:
@@ -24,6 +26,8 @@ from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOp
 from quantiphyse.utils import get_plugins, QpException
 
 from .model import Model, Parameter
+
+LOG = logging.getLogger(__name__)
 
 def get_data_models():
     ret = {}
@@ -69,8 +73,11 @@ class FabberDataModel(DataModel):
         raise NotImplementedError()
 
     def get_timeseries(self, param_values):
-        return self._fab.model_evaluate(self.fab_options, param_values, self.nt)
-           
+        LOG.debug("Fabbber options %s", self.fab_options)
+        ts = self._fab.model_evaluate(self.fab_options, param_values, self.nt)
+        LOG.debug("Fabbber timeseries %s", ts)
+        return ts
+
 class AslDataModel(FabberDataModel):
     """
     Generates simulated ASL data using Fabber
@@ -132,9 +139,6 @@ class DscDataModel(FabberDataModel):
             "model" : "dsc",
         }
         fab_options.update(self.options)
-        print(fab_options)
-        # Model expects time resolution in minutes
-        fab_options["delt"] = float(fab_options["delt"]) / 60.0
         return fab_options
 
     @property
