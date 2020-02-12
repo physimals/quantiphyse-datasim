@@ -92,10 +92,13 @@ class AslDataModel(FabberDataModel):
         self.gui.add("Bolus duration", NumericOption(minval=0, maxval=5, default=1.8), key="tau")
         self.gui.add("Labelling", ChoiceOption(["CASL/pCASL", "PASL"], [True, False], default=True), key="casl")
         self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
+        self.gui.add("Arterial component", BoolOption(), key="incart")
 
         self.known_params = [
             Parameter("ftiss", "CBF", default=10.0, units="ml/100g/s"),
-            Parameter("delttiss", "ATT", default=1.3, units="s"),
+            Parameter("delttiss", "ATT to tissue", default=1.3, units="s"),
+            Parameter("fblood", "Blood CBF", default=10.0, units="ml/100g/s"),
+            Parameter("deltblood", "Transit time to artery", default=1.3, units="s"),
         ]
 
     @property
@@ -185,11 +188,11 @@ class DceDataModel(FabberDataModel):
 
         self.known_params = [
             Parameter("sig0", "Signal offset", default=100.0),
-            Parameter("fp", "Flow", default=0.5, units="min^-1"),
-            Parameter("ps", "Permeability-surface area", default=0.5, units="min^-1"),
-            Parameter("ktrans", "Transfer coefficient", default=0.5, units="min^-1"),
-            Parameter("ve", "Extracellular volume fraction", default=0.2),
-            Parameter("vp", "Vascular plasma volume fraction", default=0.05),
+            Parameter("fp", "Flow, Fp", default=0.5, units="min^-1"),
+            Parameter("ps", "Permeability-surface area, PS", default=0.5, units="min^-1"),
+            Parameter("ktrans", "Transfer coefficient, Ktrans", default=0.5, units="min^-1"),
+            Parameter("ve", "Extracellular volume fraction Ve", default=0.2),
+            Parameter("vp", "Vascular plasma volume fraction Vp", default=0.05),
             Parameter("t10", "T1", default=1.0, units="s"),
         ]
 
