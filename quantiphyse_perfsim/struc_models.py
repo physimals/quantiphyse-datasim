@@ -33,15 +33,39 @@ def get_struc_models():
     return ret
 
 class StructureModel(Model):
+    """
+    Base class for a structure model
+    
+    The ``structures`` property must be defined as a mapping from structure name to
+    readable description
+    """
 
     def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         """
-        Generic function to generate test data from a set of
-        partial volume maps, a dictionary of parameter values 
-        for each structure
-        
-        Calls the 'timeseries' method which must be implemented
-        by the specific data model
+        Generate simulated data for a given data model and parameter values
+
+        :param data_model: DataModel which implements the ``timeseries`` method
+        :param param_values: Mapping from structure name to sequence of parameter values
+        :output_param_maps: If True, also output QpData containing maps of the 
+                            parameter values used to generate simulated data in each voxel
+
+        @return If ``output_param_maps`` is ``False``, QpData containing simulated timeseries data
+                If ``output_param_maps`` is ``True``, tuple of simulated timeseries data and mapping
+                of param name to parameter value map
+        """
+        raise NotImplementedError()
+
+class PartialVolumeStructureModel(Model):
+    """
+    Structure model which defines the structure as a set of partial volume maps
+
+    The ``get_structure_maps`` method must be implemented to return a mapping
+    from structure name to partial volume map.
+    """
+
+    def get_simulated_data(self, data_model, param_values, output_param_maps=False):
+        """
+        Generic implementation to generate test data from a set of partial volume maps
         """
         pv_maps = self.get_structure_maps()
 
@@ -85,62 +109,42 @@ class StructureModel(Model):
             return sim_data
 
     def get_structure_maps(self):
+        """
+        Returns a dictionary of name to a QpData instance containing partial volume
+        maps (range 0-1) for each known structure
+        """
         raise NotImplementedError()
 
-def fslimage_to_qpdata(img, name=None, vol=None, region=None):
-    """ Convert fsl.data.Image to QpData """
-    if not name: name = img.name
-    if vol is not None:
-        data = img.data[..., vol]
-    else:
-        data = img.data
-    if region is not None:
-        data = (data == region).astype(np.int)
-    return NumpyData(data, grid=DataGrid(img.shape[:3], img.voxToWorldMat), name=name)
-
-class FslStdStructureModel(StructureModel):
+class UserPvModel(PartialVolumeStructureModel):
     """
-    Structural model using standard FSL structural data
+    Structural model where user supplies partial volume maps
     """
-    NAME = "fsl"
-
-    ATLAS_PREFIXES = [
-        "MNI",
-    ]
+    NAME = "user"
 
     def __init__(self, ivm):
-        StructureModel.__init__(self, ivm, "FSL MNI standard data")
-        from fsl.data.atlases import AtlasRegistry
-        self._registry = AtlasRegistry()
-        self._registry.rescanAtlases()
-        atlas_names = []
-        self._atlases = {}
-        for atlas in sorted(self._registry.listAtlases(), key=lambda x: x.name):
-            for prefix in self.ATLAS_PREFIXES:
-                if atlas.name.startswith(prefix):
-                    for pixdim in atlas.pixdims:
-                        name = atlas.name + " %.2gx%.2gx%.2g mm" % pixdim
-                        self._atlases[name] = (atlas, pixdim)
-
-        self.gui.add("Atlas", ChoiceOption(list(self._atlases.keys())), key="atlas")
+        StructureModel.__init__(self, ivm, "User specified partial volume maps")
+        self.gui = OptionBox()
+        self.gui.add("GM map", DataOption(self.ivm, explicit=True), key="gm")
+        self.gui.add("WM map", DataOption(self.ivm, explicit=True), key="wm")
+        self.gui.add("CSF map", DataOption(self.ivm, explicit=True), key="csf")
 
     @property
     def structures(self):
-        atlas, pixdims = self._atlases[self.gui.option("atlas").value]
-        structures = []
-        for label in atlas.labels:
-            structures.append(Parameter(label.name, label.name))
-        return structures
+        return {
+            Parameter("gm", "Grey matter"),
+            Parameter("wm", "White matter"),
+            Parameter("csf", "CSF"),
+        }
 
     def get_structure_maps(self):
-        atlas, pixdims = self._atlases[self.gui.option("atlas").value]
-        structure_maps = {}
-        atlas_map = self._registry.loadAtlas(atlas.atlasID, loadSummary=False, resolution=pixdims[0])
-        for idx, label in enumerate(atlas.labels):
-            structure_maps[label.name] = fslimage_to_qpdata(atlas_map, vol=idx, name=label.name)
-        return structure_maps
+        options = self.options
+        return {
+            "gm" : self.ivm.data[options["gm"]],
+            "wm" : self.ivm.data[options["wm"]],
+            "csf" : self.ivm.data[options["csf"]],
+        }
 
-class FastStructureModel(StructureModel):
+class FastStructureModel(PartialVolumeStructureModel):
     """
     Structural model which derives partial volume maps from a FAST segmentation
     """
@@ -197,34 +201,61 @@ class FastStructureModel(StructureModel):
             "csf" : ivm.data["%s_pve_0" % qpdata.name],
         }
 
-class UserPvModel(StructureModel):
+def fslimage_to_qpdata(img, name=None, vol=None, region=None):
+    """ Convert fsl.data.Image to QpData """
+    if not name: name = img.name
+    if vol is not None:
+        data = img.data[..., vol]
+    else:
+        data = img.data
+    if region is not None:
+        data = (data == region).astype(np.int)
+    return NumpyData(data, grid=DataGrid(img.shape[:3], img.voxToWorldMat), name=name)
+
+class FslStdStructureModel(PartialVolumeStructureModel):
     """
-    Structural model where user supplies partial volume maps
+    Structural model using standard FSL structural data
+
+    FIXME not functional at present - not clear that FSL supplies relevant
+    segmentation data out of the box!
     """
-    NAME = "user"
+    NAME = "fsl"
+
+    ATLAS_PREFIXES = [
+        "MNI",
+    ]
 
     def __init__(self, ivm):
-        StructureModel.__init__(self, ivm, "User specified partial volume maps")
-        self.gui = OptionBox()
-        self.gui.add("GM map", DataOption(self.ivm, explicit=True), key="gm")
-        self.gui.add("WM map", DataOption(self.ivm, explicit=True), key="wm")
-        self.gui.add("CSF map", DataOption(self.ivm, explicit=True), key="csf")
+        StructureModel.__init__(self, ivm, "FSL MNI standard data")
+        from fsl.data.atlases import AtlasRegistry
+        self._registry = AtlasRegistry()
+        self._registry.rescanAtlases()
+        atlas_names = []
+        self._atlases = {}
+        for atlas in sorted(self._registry.listAtlases(), key=lambda x: x.name):
+            for prefix in self.ATLAS_PREFIXES:
+                if atlas.name.startswith(prefix):
+                    for pixdim in atlas.pixdims:
+                        name = atlas.name + " %.2gx%.2gx%.2g mm" % pixdim
+                        self._atlases[name] = (atlas, pixdim)
+
+        self.gui.add("Atlas", ChoiceOption(list(self._atlases.keys())), key="atlas")
 
     @property
     def structures(self):
-        return {
-            Parameter("gm", "Grey matter"),
-            Parameter("wm", "White matter"),
-            Parameter("csf", "CSF"),
-        }
+        atlas, pixdims = self._atlases[self.gui.option("atlas").value]
+        structures = []
+        for label in atlas.labels:
+            structures.append(Parameter(label.name, label.name))
+        return structures
 
     def get_structure_maps(self):
-        options = self.options
-        return {
-            "gm" : self.ivm.data[options["gm"]],
-            "wm" : self.ivm.data[options["wm"]],
-            "csf" : self.ivm.data[options["csf"]],
-        }
+        atlas, pixdims = self._atlases[self.gui.option("atlas").value]
+        structure_maps = {}
+        atlas_map = self._registry.loadAtlas(atlas.atlasID, loadSummary=False, resolution=pixdims[0])
+        for idx, label in enumerate(atlas.labels):
+            structure_maps[label.name] = fslimage_to_qpdata(atlas_map, vol=idx, name=label.name)
+        return structure_maps
 
 class CheckerboardModel(StructureModel):
     """
