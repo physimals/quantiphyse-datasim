@@ -126,13 +126,8 @@ class PerfSimWidget(QpWidget):
         main_vbox = QtGui.QVBoxLayout()
         self.setLayout(main_vbox)
 
-        title = TitleWidget(self, help="perfsim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
+        title = TitleWidget(self, help="generic/perfsim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
         main_vbox.addWidget(title)
-
-        main_vbox.addWidget(WarningBox("Pre-release - not fully functional"))
-
-        #cite = Citation(FAB_CITE_TITLE, FAB_CITE_AUTHOR, FAB_CITE_JOURNAL)
-        #main_vbox.addWidget(cite)
 
         self._optbox = OptionBox()
         self._optbox.add("Structural model", ChoiceOption([m.display_name for m in self._struc_models.values()], self._struc_models.keys()), key="struc-model")
