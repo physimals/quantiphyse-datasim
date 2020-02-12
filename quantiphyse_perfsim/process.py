@@ -69,12 +69,12 @@ class PerfSimProcess(Process):
             noise_std = np.mean(clean_data.raw()) * float(noise) / 100 
             random_noise = np.random.normal(0, noise_std, clean_data.raw().shape)
             noisy_data = NumpyData(clean_data.raw() + random_noise, grid=clean_data.grid, name=output_name)
-            self.ivm.add(noisy_data, make_main=True)
+            self.ivm.add(noisy_data, make_current=True)
             output_clean = options.pop("output-clean", None)
             if output_clean:
-                self.ivm.add(clean_data, name=output_clean)
+                self.ivm.add(clean_data, name=output_clean, make_current=False)
         else:
-            self.ivm.add(clean_data, name=output_name, make_main=True)
+            self.ivm.add(clean_data, name=output_name, make_current=True)
 
         for param, qpdata in param_maps.items():
-            self.ivm.add(qpdata, name=param)
+            self.ivm.add(qpdata, name=param, make_current=False)
