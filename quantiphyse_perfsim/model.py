@@ -26,15 +26,22 @@ class Model:
         self.ivm = ivm
         self.display_name = display_name
         self.gui = OptionBox()
+        self.nongui_options = {}
 
     @property
     def options(self):
-        return self.gui.values()
-
+        opts = self.gui.values()
+        opts.update(self.nongui_options)
+        return opts
+        
     @options.setter
     def options(self, options):
+        self.nongui_options = {}
         for k, v in options.items():
             try:
-                self.gui.option(k).value = v
-            except:
+                if self.gui.has_option(k):
+                    self.gui.option(k).value = v
+                else:
+                    self.nongui_options[k] = v
+            except ValueError:
                 raise QpException("Invalid value for option '%s': '%s'" % (k, v))
