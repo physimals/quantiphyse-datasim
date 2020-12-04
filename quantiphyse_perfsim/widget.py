@@ -1,5 +1,5 @@
 """
-Perfusion simulation Quantiphyse plugin
+Data simulation Quantiphyse plugin
 
 Author: Martin Craig <martin.craig@eng.ox.ac.uk>
 Copyright (c) 2016-2017 University of Oxford, Martin Craig
@@ -106,22 +106,85 @@ class ParamValuesGrid(QtGui.QGroupBox):
             if child.widget():
                 child.widget().deleteLater()
 
+class OptionsWidget(QtGui.QWidget):
+
+    sig_changed = QtCore.Signal()
+
+    def __init__(self, ivm, parent):
+        QtGui.QWidget.__init__(self, parent)
+        self.ivm = ivm
+
+class ModelOptions(OptionsWidget):
+    def __init__(self, ivm, parent, model_type, abbrev, model_classes):
+        OptionsWidget.__init__(self, ivm, parent)
+        self._models = {}
+        self.model = None
+        self._option_name = "%s-model" % abbrev
+        for name, cls in model_classes.items():
+            self._models[name] = cls(self.ivm)
+
+        main_vbox = QtGui.QVBoxLayout()
+        self.setLayout(main_vbox)
+
+        self.options = OptionBox()
+        self.options.add("%s model" % model_type, ChoiceOption([m.display_name for m in self._models.values()], self._models.keys()), key=self._option_name)
+        self.options.option(self._option_name).sig_changed.connect(self._changed)
+        main_vbox.addWidget(self.options)
+
+        self._create_guis(main_vbox)
+        main_vbox.addStretch(1)
+        self._changed()
+
+    def _create_guis(self, main_vbox):
+        # Create the GUIs for models - only one visible at a time!
+        for model in self._models.values():
+            if model.gui is not None:
+                model.gui.setVisible(False)
+                if isinstance(model.gui, QtGui.QWidget):
+                    main_vbox.addWidget(model.gui)
+                else:
+                    main_vbox.addLayout(model.gui)
+
+    def _changed(self):
+        chosen_name = self.options.option(self._option_name).value
+        self.model = self._models[chosen_name]
+        for name, model in self._models.items():
+            model.gui.setVisible(chosen_name == name)
+        self.sig_changed.emit()
+
+class NoiseOptions(OptionsWidget):
+    def __init__(self, ivm, parent):
+        OptionsWidget.__init__(self, ivm, parent)
+
+        main_vbox = QtGui.QVBoxLayout()
+        self.setLayout(main_vbox)
+
+        self.options = OptionBox()
+        self.options.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="noise-percent")
+        self.options.option("noise-percent").sig_changed.connect(self._changed)
+        main_vbox.addWidget(self.options)
+
+        main_vbox.addStretch(1)
+        self._changed()
+
+    def _changed(self):
+        pass
+        #self.options.set_visible("output-clean", self.options.option("noise-percent").isEnabled())
+        self.sig_changed.emit()
+
+class MotionOptions(OptionsWidget):
+    def __init__(self, ivm, parent):
+        OptionsWidget.__init__(self, ivm, parent)
+
 class PerfSimWidget(QpWidget):
     """
-    Perfusion simulation widget
+    Data simulation widget
     """
     def __init__(self, **kwargs):
-        QpWidget.__init__(self, name="Perfusion Simulator", icon="perfsim", group="Simulation",
-                          desc="Simulates data for various perfusion imaging sequences, from known parameter inputs", **kwargs)
-        self._struc_models, self._data_models = {}, {}
+        QpWidget.__init__(self, name="Data Simulator", icon="perfsim", group="Simulation",
+                          desc="Simulates data for various imaging sequences, from known parameter inputs", **kwargs)
         self._param_values = {}
 
-        for name, cls in get_struc_models().items():
-            self._struc_models[name] = cls(self.ivm)
-        for name, cls in get_data_models().items():
-            self._data_models[name] = cls(self.ivm)
-            self._data_models[name].gui.sig_changed.connect(self._data_model_changed)
-    
     def init_ui(self):
         main_vbox = QtGui.QVBoxLayout()
         self.setLayout(main_vbox)
@@ -129,47 +192,26 @@ class PerfSimWidget(QpWidget):
         title = TitleWidget(self, help="generic/perfsim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
         main_vbox.addWidget(title)
 
-        self._optbox = OptionBox()
-        self._optbox.add("Structural model", ChoiceOption([m.display_name for m in self._struc_models.values()], self._struc_models.keys()), key="struc-model")
-        self._optbox.add("Data model", ChoiceOption([m.display_name for m in self._data_models.values()], self._data_models.keys()), key="data-model")
-        self._optbox.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="noise-percent")
-        self._optbox.add("Output name", TextOption("sim_data"), key="output")
-        self._optbox.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
-        self._optbox.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
-        self._optbox.option("struc-model").sig_changed.connect(self._struc_model_changed)
-        self._optbox.option("data-model").sig_changed.connect(self._data_model_changed)
-        self._optbox.option("noise-percent").sig_changed.connect(self._noise_changed)
-        main_vbox.addWidget(self._optbox)
+        self.tabs = QtGui.QTabWidget()
+        main_vbox.addWidget(self.tabs)
 
-        # Create the GUIs for structural models - only one visible at a time!
-        self.struc_model_guis = {}
-        for model in self._struc_models.values():
-            if model.gui is not None:
-                hbox = QtGui.QHBoxLayout()
-                struc_model_gui = QtGui.QGroupBox()
-                struc_model_gui.setTitle(model.display_name)
-                vbox = QtGui.QVBoxLayout()
-                struc_model_gui.setLayout(vbox)
-                vbox.addWidget(model.gui)
-                hbox.addWidget(struc_model_gui)
-                struc_model_gui.setVisible(False)
-                main_vbox.addLayout(hbox)
-                self.struc_model_guis[model.NAME] = struc_model_gui
+        self.struc_model = ModelOptions(self.ivm, parent=self, model_type="Structural", abbrev="struc", model_classes=get_struc_models())
+        self.struc_model.sig_changed.connect(self._changed)
+        self.tabs.addTab(self.struc_model, "Structure model")
+        self.data_model = ModelOptions(self.ivm, parent=self, model_type="Data", abbrev="data", model_classes=get_data_models())
+        self.data_model.sig_changed.connect(self._changed)
+        self.tabs.addTab(self.data_model, "Data model")
+        self.noise = NoiseOptions(self.ivm, parent=self)
+        self.noise.sig_changed.connect(self._changed)
+        self.tabs.addTab(self.noise, "Noise")
+        self.motion = MotionOptions(self.ivm, parent=self)
+        self.tabs.addTab(self.motion, "Motion")
 
-        # Same for data models
-        self.data_model_guis = {}
-        for model in self._data_models.values():
-            if model.gui is not None:
-                hbox = QtGui.QHBoxLayout()
-                data_model_gui = QtGui.QGroupBox()
-                data_model_gui.setTitle(model.display_name)
-                vbox = QtGui.QVBoxLayout()
-                data_model_gui.setLayout(vbox)
-                vbox.addWidget(model.gui)
-                hbox.addWidget(data_model_gui)
-                data_model_gui.setVisible(False)
-                main_vbox.addLayout(hbox)
-                self.data_model_guis[model.NAME] = data_model_gui
+        self.options = OptionBox()
+        self.options.add("Output name", TextOption("sim_data"), key="output")
+        self.options.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
+        self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
+        main_vbox.addWidget(self.options)
 
         # Box which will be used to enter parameter values
         self._params = ParamValuesGrid()
@@ -177,32 +219,18 @@ class PerfSimWidget(QpWidget):
 
         main_vbox.addWidget(RunWidget(self))
         main_vbox.addStretch(1)
-        self._struc_model_changed()
-        self._data_model_changed()
-        self._noise_changed()
 
-    def _struc_model_changed(self):
-        struc_model = self._struc_models[self._optbox.option("struc-model").value]
-        for name, gui in self.struc_model_guis.items():
-            gui.setVisible(struc_model.NAME == name)
-        self._params.structures = struc_model.structures
-        
-    def _data_model_changed(self):
-        data_model = self._data_models[self._optbox.option("data-model").value]
-        for name, gui in self.data_model_guis.items():
-            gui.setVisible(data_model.NAME == name)
-        self._params.params = data_model.params
-
-    def _noise_changed(self):
-        self._optbox.set_visible("output-clean", self._optbox.option("noise-percent").isEnabled())
+    def _changed(self):
+        self._params.params = self.data_model.model.params
+        self._params.structures = self.struc_model.model.structures
 
     def processes(self):
-        opts = self._optbox.values()
-
-        struc_model = self._struc_models[self._optbox.option("struc-model").value]
-        data_model = self._data_models[self._optbox.option("data-model").value]
-        opts["struc-model-options"] = struc_model.options
-        opts["data-model-options"] = data_model.options
+        opts = self.options.values()
+        opts.update(self.struc_model.options.values())
+        opts.update(self.data_model.options.values())
+        opts.update(self.noise.options.values())
+        opts["struc-model-options"] = self.struc_model.model.options
+        opts["data-model-options"] = self.data_model.model.options
         opts["param-values"] = self._params.values
 
         processes = [
