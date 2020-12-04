@@ -40,6 +40,10 @@ class StructureModel(Model):
     readable description
     """
 
+    @property
+    def structures(self):
+        raise NotImplementedError()
+
     def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         """
         Generate simulated data for a given data model and parameter values
@@ -58,19 +62,22 @@ class StructureModel(Model):
 class PartialVolumeStructureModel(Model):
     """
     Structure model which defines the structure as a set of partial volume maps
-
-    The ``get_structure_maps`` method must be implemented to return a mapping
-    from structure name to partial volume map.
     """
+
+    @property
+    def structure_maps(self):
+        """
+        :return: Mapping from name to a QpData instance containing partial volume
+                 maps (range 0-1) for each known structure
+        """
+        raise NotImplementedError()
 
     def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         """
         Generic implementation to generate test data from a set of partial volume maps
         """
-        pv_maps = self.get_structure_maps()
-
         output_data = None 
-        for name, pv_map in pv_maps.items():
+        for name, pv_map in self.structure_maps.items():
             
             struc_values = param_values[name]
 
@@ -108,13 +115,6 @@ class PartialVolumeStructureModel(Model):
         else:
             return sim_data
 
-    def get_structure_maps(self):
-        """
-        Returns a dictionary of name to a QpData instance containing partial volume
-        maps (range 0-1) for each known structure
-        """
-        raise NotImplementedError()
-
 class UserPvModel(PartialVolumeStructureModel):
     """
     Structural model where user supplies partial volume maps
@@ -136,7 +136,8 @@ class UserPvModel(PartialVolumeStructureModel):
             Parameter("csf", "CSF"),
         }
 
-    def get_structure_maps(self):
+    @property
+    def structure_maps(self):
         options = self.options
         return {
             "gm" : self.ivm.data[options["gm"]],
@@ -164,7 +165,8 @@ class FastStructureModel(PartialVolumeStructureModel):
             Parameter("csf", "CSF"),
         }
 
-    def get_structure_maps(self):
+    @property
+    def structure_maps(self):
         processes = get_plugins("processes", "FastProcess")
         if len(processes) != 1:
             raise QpException("Can't identify Fast process")
@@ -249,7 +251,8 @@ class FslStdStructureModel(PartialVolumeStructureModel):
             structures.append(Parameter(label.name, label.name))
         return structures
 
-    def get_structure_maps(self):
+    @property
+    def structure_maps(self):
         atlas, pixdims = self._atlases[self.gui.option("atlas").value]
         structure_maps = {}
         atlas_map = self._registry.loadAtlas(atlas.atlasID, loadSummary=False, resolution=pixdims[0])
