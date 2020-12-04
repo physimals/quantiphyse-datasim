@@ -57,12 +57,54 @@ class FabberDataModel(DataModel):
         from fabber import Fabber
         search_dirs = get_plugins(key="fabber-dirs")
         self._fab = Fabber(*search_dirs)
-        self.known_params = []
+
+        # Include some basic parameters common to many Fabber models
+        self.known_params = [
+            Parameter(
+                "t1",
+                "Tissue T1",
+                default=1.3,
+                units="s",
+                struc_defaults={
+                    "gm" : 1.3,
+                    "wm" : 1.3,
+                    "csf" : 1.3,
+                }
+            ),
+            Parameter(
+                "t2",
+                "Tissue T2",
+                default=100,
+                units="ms",
+                struc_defaults={
+                    "gm" : 100,
+                    "wm" : 100,
+                    "csf" : 100,
+                }
+            ),
+            Parameter(
+                "t1b",
+                "Blood T1",
+                default=1.65,
+                units="s",
+                struc_defaults={
+                    "gm" : 1.65,
+                    "wm" : 1.65,
+                    "csf" : 1.65,
+                }
+            ),
+        ]
 
     @property
     def params(self):
         model_params = self._fab.get_model_params(self.fab_options)
         return [param for param in self.known_params if param.name in model_params]
+
+    def get_timeseries(self, param_values):
+        LOG.debug("Fabbber options %s", self.fab_options)
+        ts = self._fab.model_evaluate(self.fab_options, param_values, self.nt)
+        LOG.debug("Fabbber timeseries %s", ts)
+        return ts
 
     @property
     def fab_options(self):
@@ -71,12 +113,6 @@ class FabberDataModel(DataModel):
     @property
     def nt(self):
         raise NotImplementedError()
-
-    def get_timeseries(self, param_values):
-        LOG.debug("Fabbber options %s", self.fab_options)
-        ts = self._fab.model_evaluate(self.fab_options, param_values, self.nt)
-        LOG.debug("Fabbber timeseries %s", ts)
-        return ts
 
 class AslDataModel(FabberDataModel):
     """
@@ -94,11 +130,39 @@ class AslDataModel(FabberDataModel):
         self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
         self.gui.add("Arterial component", BoolOption(), key="incart")
 
-        self.known_params = [
-            Parameter("ftiss", "CBF", default=10.0, units="ml/100g/s"),
-            Parameter("delttiss", "ATT to tissue", default=1.3, units="s"),
-            Parameter("fblood", "Blood CBF", default=10.0, units="ml/100g/s"),
-            Parameter("deltblood", "Transit time to artery", default=1.3, units="s"),
+        self.known_params += [
+            Parameter(
+                "ftiss", 
+                "CBF",
+                default=10.0,
+                units="ml/100g/s",
+                struc_defaults={
+                    "gm" : 50.0,
+                    "wm" : 10.0,
+                    "csf" : 0.0,
+                }
+            ),
+            Parameter(
+                "delttiss",
+                "ATT to tissue",
+                default=1.3,
+                units="s",
+                struc_defaults={}
+            ),
+            Parameter(
+                "fblood",
+                "Blood CBF",
+                default=10.0,
+                units="ml/100g/s",
+                struc_defaults={}
+            ),
+            Parameter(
+                "deltblood",
+                "Transit time to artery",
+                default=1.0,
+                units="s",
+                struc_defaults={}
+            ),
         ]
 
     @property
@@ -107,6 +171,7 @@ class AslDataModel(FabberDataModel):
             "model" : "aslrest",
             "inctiss" : True,
             "incbat" : True,
+            #"inct1" : True,
         }
         plds = self.options.get("plds", [1.0])
         for idx, pld in enumerate(plds):
