@@ -42,6 +42,7 @@ class ParamValuesGrid(QtGui.QGroupBox):
 
     @structures.setter
     def structures(self, structures):
+        structures = sorted(structures, key=lambda x: x.name)
         if structures != self._structures:
             self._structures = structures
             self._repopulate()
@@ -92,6 +93,8 @@ class ParamValuesGrid(QtGui.QGroupBox):
             for structure_idx, structure in enumerate(self._structures):
                 if structure.name in self._values and param.name in self._values[structure.name]:
                     initial = self._values[structure.name][param.name]
+                elif structure.name in param.kwargs.get("struc_defaults", {}):
+                    initial = param.kwargs["struc_defaults"][structure.name]
                 else:
                     initial = [param.kwargs.get("default", 0.0)]
                 if isinstance(initial, (int, float)):
@@ -128,12 +131,12 @@ class ModelOptions(OptionsWidget):
 
         self.options = OptionBox()
         self.options.add("%s model" % model_type, ChoiceOption([m.display_name for m in self._models.values()], self._models.keys()), key=self._option_name)
-        self.options.option(self._option_name).sig_changed.connect(self._changed)
+        self.options.option(self._option_name).sig_changed.connect(self._model_changed)
         main_vbox.addWidget(self.options)
 
         self._create_guis(main_vbox)
         main_vbox.addStretch(1)
-        self._changed()
+        self._model_changed()
 
     def _create_guis(self, main_vbox):
         # Create the GUIs for models - only one visible at a time!
@@ -144,8 +147,9 @@ class ModelOptions(OptionsWidget):
                     main_vbox.addWidget(model.gui)
                 else:
                     main_vbox.addLayout(model.gui)
+                model.sig_changed.connect(self.sig_changed.emit)
 
-    def _changed(self):
+    def _model_changed(self):
         chosen_name = self.options.option(self._option_name).value
         self.model = self._models[chosen_name]
         for name, model in self._models.items():
@@ -161,16 +165,16 @@ class NoiseOptions(OptionsWidget):
 
         self.options = OptionBox()
         self.options.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="noise-percent")
-        self.options.option("noise-percent").sig_changed.connect(self._changed)
+        self.options.option("noise-percent").sig_changed.connect(self._update_widget_visibility)
         self.options.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
+        self.options.sig_changed.connect(self.sig_changed.emit)
         main_vbox.addWidget(self.options)
 
         main_vbox.addStretch(1)
-        self._changed()
+        self._update_widget_visibility()
 
-    def _changed(self):
+    def _update_widget_visibility(self):
         self.options.set_visible("output-clean", self.options.option("noise-percent").isEnabled())
-        self.sig_changed.emit()
 
 class MotionOptions(OptionsWidget):
     def __init__(self, ivm, parent):
@@ -197,6 +201,7 @@ class OutputOptions(OptionsWidget):
         self.options = OptionBox()
         self.options.add("Output name", TextOption("sim_data"), key="output")
         self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
+        self.options.sig_changed.connect(self.sig_changed.emit)
         main_vbox.addWidget(self.options)
 
         main_vbox.addStretch(1)
@@ -221,18 +226,17 @@ class PerfSimWidget(QpWidget):
         main_vbox.addWidget(self.tabs)
 
         self.struc_model = ModelOptions(self.ivm, parent=self, model_type="Structural", abbrev="struc", model_classes=get_struc_models())
-        self.struc_model.sig_changed.connect(self._changed)
+        self.struc_model.sig_changed.connect(self._update_params)
         self.tabs.addTab(self.struc_model, "Structure model")
         self.data_model = ModelOptions(self.ivm, parent=self, model_type="Data", abbrev="data", model_classes=get_data_models())
-        self.data_model.sig_changed.connect(self._changed)
+        self.data_model.sig_changed.connect(self._update_params)
         self.tabs.addTab(self.data_model, "Data model")
         self.noise = NoiseOptions(self.ivm, parent=self)
-        self.noise.sig_changed.connect(self._changed)
         self.tabs.addTab(self.noise, "Noise")
         self.motion = MotionOptions(self.ivm, parent=self)
         self.tabs.addTab(self.motion, "Motion")
-        self.motion = OutputOptions(self.ivm, parent=self)
-        self.tabs.addTab(self.motion, "Output")
+        self.output = OutputOptions(self.ivm, parent=self)
+        self.tabs.addTab(self.output, "Output")
 
         # Box which will be used to enter parameter values
         self._params = ParamValuesGrid()
@@ -240,8 +244,9 @@ class PerfSimWidget(QpWidget):
 
         main_vbox.addStretch(1)
         main_vbox.addWidget(RunWidget(self))
+        self._update_params()
 
-    def _changed(self):
+    def _update_params(self):
         self._params.params = self.data_model.model.params
         self._params.structures = self.struc_model.model.structures
 
