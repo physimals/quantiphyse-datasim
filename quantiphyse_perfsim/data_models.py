@@ -69,7 +69,8 @@ class FabberDataModel(DataModel):
                     "gm" : 1.3,
                     "wm" : 1.3,
                     "csf" : 1.3,
-                }
+                },
+                aliases=["T_1"],
             ),
             Parameter(
                 "t2",
@@ -80,7 +81,8 @@ class FabberDataModel(DataModel):
                     "gm" : 100,
                     "wm" : 100,
                     "csf" : 100,
-                }
+                },
+                aliases=["T_2"],
             ),
             Parameter(
                 "t1b",
@@ -91,18 +93,43 @@ class FabberDataModel(DataModel):
                     "gm" : 1.65,
                     "wm" : 1.65,
                     "csf" : 1.65,
-                }
+                },
+                aliases=["T1_b", "T_1b"],
             ),
         ]
 
     @property
     def params(self):
+        return [param for param in self.known_params if param.name in self.real_param_names]
+
+    @property
+    def real_param_names(self):
+        """
+        Fabber models often use different names for the same basic parameter (e.g. T1 might be
+        named as t1, T1, T_1, ...). This is obviously a pain but we get around it by allowing
+        parameters to have 'aliases' and maintaining a mapping from the 'standard' name to the one
+        used in the model
+        """
         model_params = self._fab.get_model_params(self.fab_options)
-        return [param for param in self.known_params if param.name in model_params]
+        real_param_names = {}
+        for param in model_params:
+            for known_param in self.known_params:
+                if param.lower() == known_param.name.lower() or param in known_param.kwargs.get("aliases", []):
+                    real_param_names[known_param.name] = param
+                    break
+            if param not in real_param_names.values():
+                raise ValueError("Unrecognized model parameter: %s" % param)
+        return real_param_names
 
     def get_timeseries(self, param_values):
         LOG.debug("Fabbber options %s", self.fab_options)
-        ts = self._fab.model_evaluate(self.fab_options, param_values, self.nt)
+        real_param_values = {}
+        real_param_names = self.real_param_names
+        # Need to correct parameter names from the 'standard' names to those
+        # used in the model
+        for k, v in param_values.items():
+            real_param_values[real_param_names[k]] = v
+        ts = self._fab.model_evaluate(self.fab_options, real_param_values, self.nt)
         LOG.debug("Fabbber timeseries %s", ts)
         return ts
 
@@ -171,7 +198,7 @@ class AslDataModel(FabberDataModel):
             "model" : "aslrest",
             "inctiss" : True,
             "incbat" : True,
-            #"inct1" : True,
+            "inct1" : True,
         }
         plds = self.options.get("plds", [1.0])
         for idx, pld in enumerate(plds):
@@ -220,13 +247,12 @@ class DceDataModel(FabberDataModel):
     NAME = "dce"
     
     def __init__(self, ivm):
-        Model.__init__(self, ivm, "Dynamic Contrast-Enhanced MRI")
+        FabberDataModel.__init__(self, ivm, "Dynamic Contrast-Enhanced MRI")
         
         from fabber import Fabber
         search_dirs = get_plugins(key="fabber-dirs")
         self._fab = Fabber(*search_dirs)
 
-        self.gui = OptionBox()
         self.gui.add("Model", ChoiceOption(["Standard Tofts model",
                                              "Extended Tofts model (ETM)",
                                              "2 Compartment exchange model",
