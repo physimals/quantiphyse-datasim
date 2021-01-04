@@ -12,20 +12,28 @@ from __future__ import division, unicode_literals, absolute_import, print_functi
 from quantiphyse.gui.options import OptionBox
 from quantiphyse.utils import QpException
 
+try:
+    from PySide import QtGui, QtCore, QtGui as QtWidgets
+except ImportError:
+    from PySide2 import QtGui, QtCore, QtWidgets
+
 class Parameter:
     def __init__(self, name, display_name, **kwargs):
         self.name = name
         self.display_name = display_name
         self.kwargs = kwargs
 
-class Model:
+class Model(QtCore.QObject):
     """
-    Provides ROIs for named structures in which perfusion will be modelled
     """
+    sig_changed = QtCore.Signal()
+
     def __init__(self, ivm, display_name):
+        QtCore.QObject.__init__(self)
         self.ivm = ivm
         self.display_name = display_name
         self.gui = OptionBox()
+        self.gui.sig_changed.connect(self.sig_changed.emit)
         self.nongui_options = {}
 
     @property
