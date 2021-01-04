@@ -36,8 +36,7 @@ class StructureModel(Model):
     """
     Base class for a structure model
     
-    The ``structures`` property must be defined as a mapping from structure name to
-    readable description
+    The ``structures`` property must be defined as a sequence of Parameter objects
     """
 
     @property
@@ -122,28 +121,30 @@ class UserPvModel(PartialVolumeStructureModel):
     NAME = "user"
 
     def __init__(self, ivm):
-        StructureModel.__init__(self, ivm, "User specified partial volume maps")
-        self.gui = OptionBox()
+        PartialVolumeStructureModel.__init__(self, ivm, "User specified partial volume maps")
         self.gui.add("GM map", DataOption(self.ivm, explicit=True), key="gm")
         self.gui.add("WM map", DataOption(self.ivm, explicit=True), key="wm")
         self.gui.add("CSF map", DataOption(self.ivm, explicit=True), key="csf")
 
     @property
     def structures(self):
-        return {
+        return [
             Parameter("gm", "Grey matter"),
             Parameter("wm", "White matter"),
             Parameter("csf", "CSF"),
-        }
+        ]
 
     @property
     def structure_maps(self):
         options = self.options
-        return {
-            "gm" : self.ivm.data[options["gm"]],
-            "wm" : self.ivm.data[options["wm"]],
-            "csf" : self.ivm.data[options["csf"]],
-        }
+        try:
+            return {
+                "gm" : self.ivm.data[options["gm"]],
+                "wm" : self.ivm.data[options["wm"]],
+                "csf" : self.ivm.data[options["csf"]],
+            }
+        except KeyError as exc:
+            raise QpException("No structure map defined: %s" % str(exc.args[0]))
 
 class FastStructureModel(PartialVolumeStructureModel):
     """
@@ -153,17 +154,16 @@ class FastStructureModel(PartialVolumeStructureModel):
 
     def __init__(self, ivm):
         StructureModel.__init__(self, ivm, "Partial volume maps from a FAST segmentation")
-        self.gui = OptionBox()
         self.gui.add("Structural image (brain extracted)", DataOption(self.ivm, explicit=True), key="struc")
         self.gui.add("Image type", ChoiceOption(["T1 weighted", "T2 weighted", "Proton Density"], return_values=[1, 2, 3]), key="type")
         
     @property
     def structures(self):
-        return {
+        return [
             Parameter("gm", "Grey matter"),
             Parameter("wm", "White matter"),
             Parameter("csf", "CSF"),
-        }
+        ]
 
     @property
     def structure_maps(self):
@@ -273,14 +273,13 @@ class CheckerboardModel(StructureModel):
 
     def __init__(self, ivm):
         StructureModel.__init__(self, ivm, "Checkerboard")
-        self.gui = OptionBox()
         self.gui.add("Number of voxels per patch (approx)", NumericOption(minval=1, maxval=1000, default=20, intonly=True), key="voxels-per-patch")
 
     @property
     def structures(self):
-        return {
+        return [
             Parameter("data", "Sequence of test values"),
-        }
+        ]
 
     def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         if len(param_values) != 1:
