@@ -162,19 +162,44 @@ class NoiseOptions(OptionsWidget):
         self.options = OptionBox()
         self.options.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="noise-percent")
         self.options.option("noise-percent").sig_changed.connect(self._changed)
+        self.options.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
         main_vbox.addWidget(self.options)
 
         main_vbox.addStretch(1)
         self._changed()
 
     def _changed(self):
-        pass
-        #self.options.set_visible("output-clean", self.options.option("noise-percent").isEnabled())
+        self.options.set_visible("output-clean", self.options.option("noise-percent").isEnabled())
         self.sig_changed.emit()
 
 class MotionOptions(OptionsWidget):
     def __init__(self, ivm, parent):
         OptionsWidget.__init__(self, ivm, parent)
+
+class ParamsOptions(OptionsWidget):
+    def __init__(self, ivm, parent):
+        OptionsWidget.__init__(self, ivm, parent)
+
+        main_vbox = QtGui.QVBoxLayout()
+        self.setLayout(main_vbox)
+
+        self._params = ParamValuesGrid()
+        main_vbox.addWidget(self._params)
+        main_vbox.addStretch(1)
+
+class OutputOptions(OptionsWidget):
+    def __init__(self, ivm, parent):
+        OptionsWidget.__init__(self, ivm, parent)
+
+        main_vbox = QtGui.QVBoxLayout()
+        self.setLayout(main_vbox)
+
+        self.options = OptionBox()
+        self.options.add("Output name", TextOption("sim_data"), key="output")
+        self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
+        main_vbox.addWidget(self.options)
+
+        main_vbox.addStretch(1)
 
 class PerfSimWidget(QpWidget):
     """
@@ -206,26 +231,22 @@ class PerfSimWidget(QpWidget):
         self.tabs.addTab(self.noise, "Noise")
         self.motion = MotionOptions(self.ivm, parent=self)
         self.tabs.addTab(self.motion, "Motion")
-
-        self.options = OptionBox()
-        self.options.add("Output name", TextOption("sim_data"), key="output")
-        self.options.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
-        self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
-        main_vbox.addWidget(self.options)
+        self.motion = OutputOptions(self.ivm, parent=self)
+        self.tabs.addTab(self.motion, "Output")
 
         # Box which will be used to enter parameter values
         self._params = ParamValuesGrid()
         main_vbox.addWidget(self._params)
 
-        main_vbox.addWidget(RunWidget(self))
         main_vbox.addStretch(1)
+        main_vbox.addWidget(RunWidget(self))
 
     def _changed(self):
         self._params.params = self.data_model.model.params
         self._params.structures = self.struc_model.model.structures
 
     def processes(self):
-        opts = self.options.values()
+        opts = self.output.options.values()
         opts.update(self.struc_model.options.values())
         opts.update(self.data_model.options.values())
         opts.update(self.noise.options.values())
