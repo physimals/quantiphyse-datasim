@@ -48,6 +48,8 @@ class Model(QtCore.QObject):
         for k, v in options.items():
             try:
                 if self.gui.has_option(k):
+                    if not self.gui.option(k).isEnabled():
+                        self.gui.set_checked(k, True)
                     self.gui.option(k).value = v
                 else:
                     self.nongui_options[k] = v
