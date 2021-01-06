@@ -11,7 +11,6 @@ import numpy as np
 
 from quantiphyse.processes import Process
 from quantiphyse.utils import QpException
-from quantiphyse.data import NumpyData
 
 from .data_models import get_data_models
 from .struc_models import get_struc_models
@@ -58,23 +57,16 @@ class PerfSimProcess(Process):
         self.log("Getting simulated data\n")
         ret = struc_model.get_simulated_data(data_model, param_values, output_param_maps=output_param_maps)
         if output_param_maps:
-            clean_data, param_maps = ret
+            sim_data, param_maps = ret
         else:
-            clean_data, param_maps = ret, {}
+            sim_data, param_maps = ret, {}
 
-        output_name = options.pop("output", "sim_data")
-        noise = options.pop("noise-percent", 0)
-        if noise > 0:
-            self.log("Adding noise\n")
-            noise_std = np.mean(clean_data.raw()) * float(noise) / 100 
-            random_noise = np.random.normal(0, noise_std, clean_data.raw().shape)
-            noisy_data = NumpyData(clean_data.raw() + random_noise, grid=clean_data.grid, name=output_name)
-            self.ivm.add(noisy_data, make_current=True)
-            output_clean = options.pop("output-clean", None)
-            if output_clean:
-                self.ivm.add(clean_data, name=output_clean, make_current=False)
-        else:
-            self.ivm.add(clean_data, name=output_name, make_current=True)
+        output_clean_name = options.pop("output-clean", "")
+        if output_clean_name:
+            self.ivm.add(sim_data.raw().copy(), grid=sim_data.grid, name=output_clean_name, make_current=False)
 
         for param, qpdata in param_maps.items():
             self.ivm.add(qpdata, name=param, make_current=False)
+
+        output_name = options.pop("output", "sim_data")
+        self.ivm.add(sim_data, name=output_name, make_current=True)
