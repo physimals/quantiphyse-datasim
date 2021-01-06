@@ -164,21 +164,35 @@ class NoiseOptions(OptionsWidget):
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
-        self.options.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="noise-percent")
-        self.options.option("noise-percent").sig_changed.connect(self._update_widget_visibility)
-        self.options.add("Also output clean data", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
+        self.options.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="percent")
         self.options.sig_changed.connect(self.sig_changed.emit)
+        main_vbox.addWidget(self.options)
+
+        main_vbox.addStretch(1)
+
+class MotionOptions(OptionsWidget):
+    def __init__(self, ivm, parent):
+        OptionsWidget.__init__(self, ivm, parent)
+
+        main_vbox = QtGui.QVBoxLayout()
+        self.setLayout(main_vbox)
+
+        self.options = OptionBox()
+        self.options.add("Simulate motion", BoolOption(default=False), key="motion")
+        self.options.option("motion").sig_changed.connect(self._update_widget_visibility)
+        self.options.add("Random translation standard deviation (mm)", NumericOption(minval=0, maxval=5, default=1, decimals=2), key="std")
+        self.options.add("Random rotation standard deviation (\N{DEGREE SIGN})", NumericOption(minval=0, maxval=10, default=1, decimals=2), key="std_rot")
+        self.options.add("Padding (mm)", NumericOption(minval=0, maxval=10, default=5, decimals=1), key="padding", checked=True)
+        self.options.add("Interpolation", ChoiceOption(["Nearest neighbour", "Linear", "Quadratic", "Cubic"], return_values=range(4), default=3), key="order")
         main_vbox.addWidget(self.options)
 
         main_vbox.addStretch(1)
         self._update_widget_visibility()
 
     def _update_widget_visibility(self):
-        self.options.set_visible("output-clean", self.options.option("noise-percent").isEnabled())
-
-class MotionOptions(OptionsWidget):
-    def __init__(self, ivm, parent):
-        OptionsWidget.__init__(self, ivm, parent)
+        enabled = self.options.option("motion").value
+        for option in ["std", "std_rot", "padding", "order"]:
+            self.options.set_visible(option, enabled)
 
 class ParamsOptions(OptionsWidget):
     def __init__(self, ivm, parent):
@@ -201,7 +215,7 @@ class OutputOptions(OptionsWidget):
         self.options = OptionBox()
         self.options.add("Output name", TextOption("sim_data"), key="output")
         self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
-        self.options.sig_changed.connect(self.sig_changed.emit)
+        self.options.add("Output clean data (no noise/motion)", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
         main_vbox.addWidget(self.options)
 
         main_vbox.addStretch(1)
@@ -254,13 +268,28 @@ class PerfSimWidget(QpWidget):
         opts = self.output.options.values()
         opts.update(self.struc_model.options.values())
         opts.update(self.data_model.options.values())
-        opts.update(self.noise.options.values())
         opts["struc-model-options"] = self.struc_model.model.options
         opts["data-model-options"] = self.data_model.model.options
         opts["param-values"] = self._params.values
 
         processes = [
-            {"PerfSim" : opts}
+            {"PerfSim" : opts},
         ]
+
+        noise_opts = self.noise.options.values()
+        if "percent" in noise_opts:
+            noise_opts.update({
+                "data" : opts["output"],
+                "output-name" : opts["output"],
+            })
+            processes.append({"AddNoise" : noise_opts})
+
+        motion_opts = self.motion.options.values()
+        if motion_opts.pop("motion"):
+            motion_opts.update({
+                "data" : opts["output"],
+                "output-name" : opts["output"],
+            })
+            processes.append({"SimMotion" : motion_opts})
 
         return processes
