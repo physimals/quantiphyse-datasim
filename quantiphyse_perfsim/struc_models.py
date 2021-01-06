@@ -20,7 +20,7 @@ except ImportError:
     from PySide2 import QtGui, QtCore, QtWidgets
 
 from quantiphyse.data import NumpyData, DataGrid, ImageVolumeManagement
-from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption
+from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption, RunButton
 from quantiphyse.utils import QpException, get_plugins
 from quantiphyse.processes import Process
 
@@ -75,9 +75,27 @@ class PartialVolumeStructureModel(Model):
         """
         Generic implementation to generate test data from a set of partial volume maps
         """
+        if len(self.structure_maps) == 0:
+            raise QpException("No structures defined")
+
+        # First check the PV maps - they should all be in the range 0-1 and not sum to
+        # more than 1 in any voxel
+        sum_map = None
+        for name, pv_map in self.structure_maps.items():
+            pv_data = pv_map.raw()
+            if not np.all(pv_data >= 0):
+                raise QpException("Partial volume map contained negative values: %s" % name)
+            if not np.all(pv_data <= 1):
+                raise QpException("Partial volume map contained values > 1: %s" % name)
+            if sum_map is None:
+                sum_map = np.zeros(pv_data.shape, dtype=np.float32)
+            sum_map += pv_data
+
+        if sum_map is not None and not np.all(sum_map <= 1):
+            raise QpException("Partial volume maps sum to > 1 in at least one voxel")
+
         output_data = None 
         for name, pv_map in self.structure_maps.items():
-            
             struc_values = param_values[name]
 
             # Check that there is exactly one parameter value per structure
@@ -114,6 +132,49 @@ class PartialVolumeStructureModel(Model):
         else:
             return sim_data
 
+class AddEmbeddingDialog(QtGui.QDialog):
+    """
+    Dialog box enabling one item to be chosen from a list
+    """
+
+    def __init__(self, parent, existing_strucs):
+        super(AddEmbeddingDialog, self).__init__(parent)
+        self.sel_text = None
+        self.sel_data = None
+
+        self.setWindowTitle("Add embedding")
+        grid = QtGui.QGridLayout()
+
+        grid.addWidget(QtGui.QLabel("Name of embedded structure"), 0, 0)
+        self._edit = QtGui.QLineEdit(self)
+        self._edit.textChanged.connect(self._name_changed)
+        grid.addWidget(self._edit, 0, 1)
+
+        grid.addWidget(QtGui.QLabel("Default parameters from"), 1, 0)
+        self._list = QtGui.QComboBox(self)
+        for struc in existing_strucs:
+            self._list.addItem(struc.display_name, struc.name)
+        grid.addWidget(self._list, 1, 1)
+
+        self.button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(False)
+        grid.addWidget(self.button_box, 2, 0, 1, 2)
+
+        self.setLayout(grid)
+
+    def _name_changed(self):
+        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(self.name != "")
+
+    @property
+    def name(self):
+        return self._edit.text()
+
+    @property
+    def inherit_from(self):
+        return self._list.itemData(self._list.currentIndex())
+
 class UserPvModel(PartialVolumeStructureModel):
     """
     Structural model where user supplies partial volume maps
@@ -122,27 +183,43 @@ class UserPvModel(PartialVolumeStructureModel):
 
     def __init__(self, ivm):
         PartialVolumeStructureModel.__init__(self, ivm, "User specified partial volume maps")
-        self.gui.add("GM map", DataOption(self.ivm, explicit=True), key="gm")
-        self.gui.add("WM map", DataOption(self.ivm, explicit=True), key="wm")
-        self.gui.add("CSF map", DataOption(self.ivm, explicit=True), key="csf")
-
-    @property
-    def structures(self):
-        return [
+        self.default_strucs = [
             Parameter("gm", "Grey matter"),
             Parameter("wm", "White matter"),
             Parameter("csf", "CSF"),
         ]
+        self.embeddings = []
+        self._refresh_opts()
+
+    def _refresh_opts(self):
+        options = self.options
+        self.gui.clear()
+        self.gui.add("Default structures")
+        for struc in self.default_strucs:
+            self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), checked=True, enabled=struc.name in options, key=struc.name)
+        self.gui.add("Embeddings")
+        for struc in self.embeddings:
+            self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), key=struc.name)
+        self.gui.add(None, RunButton("Add embedding", callback=self._add_embedding), key="add_embedding")
+
+    def _add_embedding(self):
+        dialog = AddEmbeddingDialog(self.gui, self.default_strucs)
+        accept = dialog.exec_()
+        if accept:
+            self.embeddings.append(Parameter(dialog.name, "Embedding"))
+
+    @property
+    def structures(self):
+        return [struc for struc in self.default_strucs if struc.name in self.options] # + self.embeddings
 
     @property
     def structure_maps(self):
         options = self.options
         try:
-            return {
-                "gm" : self.ivm.data[options["gm"]],
-                "wm" : self.ivm.data[options["wm"]],
-                "csf" : self.ivm.data[options["csf"]],
-            }
+            ret = {}
+            for k, v in options.items():
+                ret[k] = self.ivm.data[v]
+            return ret
         except KeyError as exc:
             raise QpException("No structure map defined: %s" % str(exc.args[0]))
 
