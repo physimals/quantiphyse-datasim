@@ -141,87 +141,157 @@ class AddEmbeddingDialog(QtGui.QDialog):
         super(AddEmbeddingDialog, self).__init__(parent)
         self.sel_text = None
         self.sel_data = None
+        self.existing_names = [struc.name for struc in existing_strucs]
 
         self.setWindowTitle("Add embedding")
-        grid = QtGui.QGridLayout()
+        vbox = QtGui.QVBoxLayout()
+        self.setLayout(vbox)
 
-        grid.addWidget(QtGui.QLabel("Name of embedded structure"), 0, 0)
-        self._edit = QtGui.QLineEdit(self)
-        self._edit.textChanged.connect(self._name_changed)
-        grid.addWidget(self._edit, 0, 1)
-
-        grid.addWidget(QtGui.QLabel("Default parameters from"), 1, 0)
-        self._list = QtGui.QComboBox(self)
-        for struc in existing_strucs:
-            self._list.addItem(struc.display_name, struc.name)
-        grid.addWidget(self._list, 1, 1)
+        self._opts = OptionBox()
+        name = self._opts.add("Name of embedded structure", TextOption(), key="name")
+        name.textChanged.connect(self._name_changed)
+        self._opts.add("Structure type", ChoiceOption(["Additional PVE", "Embedding", "Activation mask"], return_values=["add", "embed", "act"]), key="type")
+        self._opts.add("Parent structure", ChoiceOption([s.display_name for s in existing_strucs], [s.name for s in existing_strucs]), key="parent")
+        vbox.addWidget(self._opts)
 
         self.button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(False)
-        grid.addWidget(self.button_box, 2, 0, 1, 2)
-
-        self.setLayout(grid)
+        vbox.addWidget(self.button_box)
 
     def _name_changed(self):
-        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(self.name != "")
+        accept = self.name != "" and self.name not in self.existing_names
+        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(accept)
 
     @property
     def name(self):
-        return self._edit.text()
+        return self._opts.option("name").value
 
     @property
-    def inherit_from(self):
-        return self._list.itemData(self._list.currentIndex())
+    def struc_type(self):
+        return self._opts.option("type").value
+
+    @property
+    def parent(self):
+        return self._option.option("parent").value
 
 class UserPvModel(PartialVolumeStructureModel):
     """
     Structural model where user supplies partial volume maps
+
+    Three default tissue types are defined: Grey matter (GM), White matter (WM) and
+    CSF. A partial volume map can be specified for each of these (but they are not
+    all compulsary)
+
+    The model also supports additional user-defined structures which come in three types:
+
+     - Additional partial volume maps. These are simply added to the existing default 
+       structures. The total sum in any voxel must not exceed 1
+     - Embeddings. These are added to the existing default maps, which are scaled to
+       1 - the embedding partial volume. For example where the embedding partial volume
+       is 1 other structures have zero partial volume. Where the embedding partial volume
+       is 0.8, all other structures are scaled by multiplying by 0.2.
+     - Activation mask. These are ROIs that cause a specific tissue type to replaced by
+       a different set of parameter values within the ROI. For example a GM activation
+       mask will replace the 'usual' GM parameters with another set of parameters within
+       the mask. This mask can be used to simulate activation of a particular region, e.g.
+       derived from a brain atlas.
     """
     NAME = "user"
 
     def __init__(self, ivm):
-        PartialVolumeStructureModel.__init__(self, ivm, "User specified partial volume maps")
+        PartialVolumeStructureModel.__init__(self, ivm, "User specified partial volume maps", title="Structure maps")
         self.default_strucs = [
             Parameter("gm", "Grey matter"),
             Parameter("wm", "White matter"),
             Parameter("csf", "CSF"),
         ]
-        self.embeddings = []
+        self.nongui_options = {"additional" : []}
         self._refresh_opts()
 
     def _refresh_opts(self):
         options = self.options
         self.gui.clear()
-        self.gui.add("Default structures")
         for struc in self.default_strucs:
             self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), checked=True, enabled=struc.name in options, key=struc.name)
-        self.gui.add("Embeddings")
-        for struc in self.embeddings:
-            self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), key=struc.name)
-        self.gui.add(None, RunButton("Add embedding", callback=self._add_embedding), key="add_embedding")
+        for struc in self.nongui_options.get("additional", []):
+            self.gui.add("%s map" % struc.name, DataOption(self.ivm, explicit=True), key=struc.name)
+            
+        self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
+
+    @property
+    def options(self):
+        opts = {
+            "pvmaps" : self.gui.values()
+        }
+        opts.update(self.nongui_options)
+        return opts
+
+    @options.setter
+    def options(self, options):
+        self.nongui_options["additional"] = options.pop("additional", {})
+        self._refresh_opts()
+
+        for k, v in options.pop("pvmaps", {}).items():
+            try:
+                if self.gui.has_option(k):
+                    if not self.gui.option(k).isEnabled():
+                        self.gui.set_checked(k, True)
+                    self.gui.option(k).value = v
+                else:
+                    raise QpException("PV map '%s' given for unrecognized structure '%s'" % (v, k))
+            except ValueError:
+                raise QpException("Invalid value for option '%s': '%s'" % (k, v))
 
     def _add_embedding(self):
         dialog = AddEmbeddingDialog(self.gui, self.default_strucs)
-        accept = dialog.exec_()
+        try:
+            accept = dialog.exec_()
+        except:
+            import traceback
+            traceback.print_exc()
         if accept:
-            self.embeddings.append(Parameter(dialog.name, "Embedding"))
+            self.nongui_options.get("additional", []).append(Parameter(dialog.name, "Embedding"))
+            options = self.options
+            self._refresh_opts()
+            self.options = options
 
     @property
     def structures(self):
-        return [struc for struc in self.default_strucs if struc.name in self.options] # + self.embeddings
+        ret = [struc for struc in self.default_strucs if struc.name in self.options["pvmaps"]] + self.nongui_options.get("additional", [])
+        return ret
 
     @property
     def structure_maps(self):
         options = self.options
+        pvmaps = options.get("pvmaps", {})
         try:
             ret = {}
-            for k, v in options.items():
-                ret[k] = self.ivm.data[v]
+            total_pv = None
+            for struc in self.default_strucs:
+                if struc.name in pvmaps:
+                    ret[struc.name] = self.ivm.data[pvmaps[struc.name]]
+                    if total_pv is None:
+                        total_pv = np.zeros(ret[struc.name].grid.shape, dtype=np.float32)
+                    total_pv += ret[struc.name].raw()
+            
+            # Additional - we need to downweight existing structure PVs so they all sum to 1 at most
+            for struc in self.nongui_options.get("additional", []):
+                data = self.ivm.data[pvmaps[struc.name]]
+                reweighting = 1-data.raw()
+                for name, qpdata in ret.items():
+                    qpdata = NumpyData(qpdata.raw() * reweighting, grid=qpdata.grid, name=name)
+                    ret[name] = qpdata
+                ret[struc.name] = data
+
             return ret
         except KeyError as exc:
-            raise QpException("No structure map defined: %s" % str(exc.args[0]))
+            raise
+            #raise QpException("No structure map defined: %s" % str(exc.args[0]))
+
+    def _reweight(self, strucs, to_pv):
+        pass
 
 class FastStructureModel(PartialVolumeStructureModel):
     """
