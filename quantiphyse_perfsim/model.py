@@ -28,11 +28,11 @@ class Model(QtCore.QObject):
     """
     sig_changed = QtCore.Signal()
 
-    def __init__(self, ivm, display_name):
+    def __init__(self, ivm, display_name, **kwargs):
         QtCore.QObject.__init__(self)
         self.ivm = ivm
         self.display_name = display_name
-        self.gui = OptionBox()
+        self.gui = OptionBox(**kwargs)
         self.gui.sig_changed.connect(self.sig_changed.emit)
         self.nongui_options = {}
 
@@ -41,7 +41,7 @@ class Model(QtCore.QObject):
         opts = self.gui.values()
         opts.update(self.nongui_options)
         return opts
-        
+
     @options.setter
     def options(self, options):
         self.nongui_options = {}
