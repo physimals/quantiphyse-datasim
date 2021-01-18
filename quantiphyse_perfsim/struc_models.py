@@ -173,8 +173,8 @@ class AddEmbeddingDialog(QtGui.QDialog):
         return self._opts.option("type").value
 
     @property
-    def parent(self):
-        return self._option.option("parent").value
+    def parent_struc(self):
+        return self._opts.option("parent").value
 
 class UserPvModel(PartialVolumeStructureModel):
     """
@@ -207,7 +207,7 @@ class UserPvModel(PartialVolumeStructureModel):
             Parameter("wm", "White matter"),
             Parameter("csf", "CSF"),
         ]
-        self.nongui_options = {"additional" : []}
+        self.nongui_options = {"additional" : {}}
         self._refresh_opts()
 
     def _refresh_opts(self):
@@ -215,10 +215,24 @@ class UserPvModel(PartialVolumeStructureModel):
         self.gui.clear()
         for struc in self.default_strucs:
             self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), checked=True, enabled=struc.name in options, key=struc.name)
-        for struc in self.nongui_options.get("additional", []):
-            self.gui.add("%s map" % struc.name, DataOption(self.ivm, explicit=True), key=struc.name)
-            
+        for struc in self.nongui_options["additional"].values():
+            del_btn = self._struc_delete_btn(struc)
+            display_type = {"add" : "map", "embed" : "embedding", "act" : "mask"}.get(struc["struc_type"], "map")
+            self.gui.add("%s %s" % (struc["name"], display_type), DataOption(self.ivm, explicit=True, rois=display_type=="mask"), del_btn, key=struc["name"])
+
         self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
+
+    def _struc_delete_btn(self, add_struc):
+        def _del_cb():
+            self._del_struc(add_struc["name"])
+
+        btn = QtGui.QPushButton("Delete")
+        btn.clicked.connect(_del_cb)
+        return btn
+
+    def _del_struc(self, name):
+        self.nongui_options["additional"].pop(name, None)
+        self._refresh_opts()
 
     @property
     def options(self):
@@ -252,20 +266,22 @@ class UserPvModel(PartialVolumeStructureModel):
             import traceback
             traceback.print_exc()
         if accept:
-            self.nongui_options.get("additional", []).append(Parameter(dialog.name, "Embedding"))
+            self.nongui_options["additional"][dialog.name] = {"name" : dialog.name, "struc_type" : dialog.struc_type, "parent_struc" : dialog.parent_struc}
             options = self.options
             self._refresh_opts()
             self.options = options
 
     @property
     def structures(self):
-        ret = [struc for struc in self.default_strucs if struc.name in self.options["pvmaps"]] + self.nongui_options.get("additional", [])
+        ret = [struc for struc in self.default_strucs if struc.name in self.options["pvmaps"]]
+        for struc in self.nongui_options["additional"].values():
+            ret.append(Parameter(**struc))
         return ret
 
     @property
     def structure_maps(self):
         options = self.options
-        pvmaps = options.get("pvmaps", {})
+        pvmaps = options["pvmaps"]
         try:
             ret = {}
             total_pv = None
@@ -275,15 +291,41 @@ class UserPvModel(PartialVolumeStructureModel):
                     if total_pv is None:
                         total_pv = np.zeros(ret[struc.name].grid.shape, dtype=np.float32)
                     total_pv += ret[struc.name].raw()
-            
-            # Additional - we need to downweight existing structure PVs so they all sum to 1 at most
-            for struc in self.nongui_options.get("additional", []):
-                data = self.ivm.data[pvmaps[struc.name]]
-                reweighting = 1-data.raw()
-                for name, qpdata in ret.items():
-                    qpdata = NumpyData(qpdata.raw() * reweighting, grid=qpdata.grid, name=name)
-                    ret[name] = qpdata
-                ret[struc.name] = data
+
+            # Additional structures
+            for struc in self.nongui_options["additional"].values():
+                data = self.ivm.data[pvmaps[struc["name"]]]
+                struc_type = struc.get("struc_type", "")
+                if struc_type == "embed":
+                    # Embedding - we need to downweight existing structure PVs so they all sum to 1 at most
+                    reweighting = 1-data.raw()
+                    for name, qpdata in ret.items():
+                        qpdata = NumpyData(qpdata.raw() * reweighting, grid=qpdata.grid, name=name)
+                        ret[name] = qpdata
+                    ret[struc["name"]] = data
+                elif struc_type == "act":
+                    # Activation mask - replace parent structure
+                    parent_struc = struc.get("parent_struc", None)
+                    if parent_struc is None:
+                        raise QpException("Parent structure not defined for activation mask: %s" % struc["name"])
+                    elif parent_struc not in ret:
+                        raise QpException("Parent structure '%s' not found in structures list for activation mask: %s" % (parent_struc, struc["name"]))
+                    # FIXME check grids compatible and resample if not
+                    parent_data = ret[parent_struc]
+                    parent_data_masked = np.copy(parent_data.raw())
+                    activation_mask = data.raw().astype(np.int)
+
+                    # Activation structure takes over parent structure in the 
+                    activation_data = np.zeros(parent_data_masked.shape, dtype=np.float32)
+                    activation_data[activation_mask > 0] = parent_data_masked[activation_mask > 0]
+                    parent_data_masked[activation_mask > 0] = 0
+                    ret[parent_struc] = NumpyData(parent_data_masked, grid=parent_data.grid, name=parent_data.name)
+                    ret[struc["name"]] = NumpyData(activation_data, grid=data.mask, name=struc["name"])
+                elif struc_type == "add":
+                    pass # Just use data directly
+                    ret[struc["name"]] = data
+                else:
+                    raise QpException("Unknown additional structure type: %s" % struc_type)
 
             return ret
         except KeyError as exc:
