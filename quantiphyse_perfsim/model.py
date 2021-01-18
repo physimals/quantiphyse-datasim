@@ -18,8 +18,10 @@ except ImportError:
     from PySide2 import QtGui, QtCore, QtWidgets
 
 class Parameter:
-    def __init__(self, name, display_name, **kwargs):
+    def __init__(self, name, display_name=None, **kwargs):
         self.name = name
+        if display_name is None:
+            display_name = name
         self.display_name = display_name
         self.kwargs = kwargs
 
