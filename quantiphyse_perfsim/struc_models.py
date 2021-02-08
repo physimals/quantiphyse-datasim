@@ -137,8 +137,9 @@ class AddEmbeddingDialog(QtGui.QDialog):
     Dialog box enabling one item to be chosen from a list
     """
 
-    def __init__(self, parent, existing_strucs):
+    def __init__(self, parent, ivm, existing_strucs):
         super(AddEmbeddingDialog, self).__init__(parent)
+        self.ivm = ivm
         self.sel_text = None
         self.sel_data = None
         self.existing_names = [struc.name for struc in existing_strucs]
@@ -148,9 +149,11 @@ class AddEmbeddingDialog(QtGui.QDialog):
         self.setLayout(vbox)
 
         self._opts = OptionBox()
+        pvmap = self._opts.add("PV map / mask", DataOption(ivm, data=True, rois=True), key="pvmap")
+        pvmap.sig_changed.connect(self._pvmap_changed)
         name = self._opts.add("Name of embedded structure", TextOption(), key="name")
         name.textChanged.connect(self._name_changed)
-        self._opts.add("Structure type", ChoiceOption(["Additional PVE", "Embedding", "Activation mask"], return_values=["add", "embed", "act"]), key="type")
+        self._opts.add("Structure type", ChoiceOption(["Embedding", "Activation mask", "Additional PVE"], return_values=["embed", "act", "add"]), key="type")
         self._opts.add("Parent structure", ChoiceOption([s.display_name for s in existing_strucs], [s.name for s in existing_strucs]), key="parent")
         vbox.addWidget(self._opts)
 
@@ -160,9 +163,18 @@ class AddEmbeddingDialog(QtGui.QDialog):
         self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(False)
         vbox.addWidget(self.button_box)
 
+    def _pvmap_changed(self):
+        if self.name == "" and self.pvmap:
+            qpdata = self.ivm.data[self.pvmap]
+            self._opts.option("name").value = qpdata.name
+
     def _name_changed(self):
         accept = self.name != "" and self.name not in self.existing_names
         self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(accept)
+
+    @property
+    def pvmap(self):
+        return self._opts.option("pvmap").value
 
     @property
     def name(self):
@@ -214,12 +226,13 @@ class UserPvModel(PartialVolumeStructureModel):
         options = self.options
         self.gui.clear()
         for struc in self.default_strucs:
-            self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), checked=True, enabled=struc.name in options, key=struc.name)
+            data_opt = self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), checked=True, enabled=struc.name in options["pvmaps"], key=struc.name)
+            data_opt.value = options["pvmaps"].get(struc.name, None)
         for struc in self.nongui_options["additional"].values():
             del_btn = self._struc_delete_btn(struc)
             display_type = {"add" : "map", "embed" : "embedding", "act" : "mask"}.get(struc["struc_type"], "map")
-            self.gui.add("%s %s" % (struc["name"], display_type), DataOption(self.ivm, explicit=True, rois=display_type=="mask"), del_btn, key=struc["name"])
-
+            data_opt = self.gui.add("%s %s" % (struc["name"], display_type), DataOption(self.ivm, explicit=True, rois=True), del_btn, key=struc["name"])
+            data_opt.value = struc.get("pvmap", None)
         self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
 
     def _struc_delete_btn(self, add_struc):
@@ -259,14 +272,14 @@ class UserPvModel(PartialVolumeStructureModel):
                 raise QpException("Invalid value for option '%s': '%s'" % (k, v))
 
     def _add_embedding(self):
-        dialog = AddEmbeddingDialog(self.gui, self.default_strucs)
+        dialog = AddEmbeddingDialog(self.gui, self.ivm, self.default_strucs)
         try:
             accept = dialog.exec_()
         except:
             import traceback
             traceback.print_exc()
         if accept:
-            self.nongui_options["additional"][dialog.name] = {"name" : dialog.name, "struc_type" : dialog.struc_type, "parent_struc" : dialog.parent_struc}
+            self.nongui_options["additional"][dialog.name] = {"name" : dialog.name, "struc_type" : dialog.struc_type, "parent_struc" : dialog.parent_struc, "pvmap" : dialog.pvmap}
             options = self.options
             self._refresh_opts()
             self.options = options
