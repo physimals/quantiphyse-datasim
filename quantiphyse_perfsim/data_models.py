@@ -67,8 +67,8 @@ class FabberDataModel(DataModel):
                 units="s",
                 struc_defaults={
                     "gm" : 1.3,
-                    "wm" : 1.3,
-                    "csf" : 1.3,
+                    "wm" : 1.1,
+                    "csf" : 4.3,
                 },
                 aliases=["T_1"],
             ),
@@ -79,8 +79,8 @@ class FabberDataModel(DataModel):
                 units="ms",
                 struc_defaults={
                     "gm" : 100,
-                    "wm" : 100,
-                    "csf" : 100,
+                    "wm" : 50,
+                    "csf" : 750,
                 },
                 aliases=["T_2"],
             ),
@@ -174,7 +174,11 @@ class AslDataModel(FabberDataModel):
                 "ATT to tissue",
                 default=1.3,
                 units="s",
-                struc_defaults={}
+                struc_defaults={
+                    "gm" : 1.3,
+                    "wm" : 1.6,
+                    "csf" : 1.3,
+                },
             ),
             Parameter(
                 "fblood",
