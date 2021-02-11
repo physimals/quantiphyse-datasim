@@ -17,6 +17,7 @@ QP_MANIFEST = {
         PerfSimProcess
     ],
     "perfsim-data-models" : [
+        SpinEchoDataModel,
         AslDataModel,
         DscDataModel,
         DceDataModel,

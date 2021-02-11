@@ -43,39 +43,10 @@ class DataModel(Model):
     of parameter values.
     """
 
-    def get_timeseries(self, param_values):
-        raise NotImplementedError()
-
-class SpinEchoDataModel(Model):
-    """
-    Implements a model for producing simulated spin-echo data
-    """
     def __init__(self, ivm, title):
-        DataModel.__init__(self, ivm, title)
-        self.gui.add("Number of volumes", NumericOption(minval=1, maxval=1000, default=1, intonly=True), key="nt")
+        Model.__init__(self, ivm, title)
 
-    def get_timeseries(self, param_values):
-        tr = param_values.get("tr", 4.8)
-        te = param_values.get("te", 0)
-        t1 = param_values.get("t1", 1.3)
-        t2 = param_values.get("t2", 100)
-        # FIXME partition coefficient / proton density?
-        ret = [(1-np.exp(-tr/t1)) * np.exp(-te/t2)] * self.options.get("nt", 1)
-        return np.array(ret)
-
-class FabberDataModel(DataModel):
-    """
-    Generates simulated data using Fabber
-    """
-    NAME = ""
-    
-    def __init__(self, ivm, title):
-        DataModel.__init__(self, ivm, title)
-        from fabber import Fabber
-        search_dirs = get_plugins(key="fabber-dirs")
-        self._fab = Fabber(*search_dirs)
-
-        # Include some basic parameters common to many Fabber models
+        # Include some basic parameters common to many models
         self.known_params = [
             Parameter(
                 "t1",
@@ -102,6 +73,18 @@ class FabberDataModel(DataModel):
                 aliases=["T_2"],
             ),
             Parameter(
+                "pc",
+                "Partition coefficient",
+                default=0.9,
+                units="",
+                struc_defaults={
+                    "gm" : 0.98,
+                    "wm" : 0.82,
+                    "csf" : 1.15,
+                },
+                aliases=["lambda"],
+            ),
+            Parameter(
                 "t1b",
                 "Blood T1",
                 default=1.65,
@@ -114,6 +97,45 @@ class FabberDataModel(DataModel):
                 aliases=["T1_b", "T_1b"],
             ),
         ]
+
+    def get_timeseries(self, param_values):
+        raise NotImplementedError()
+
+class SpinEchoDataModel(Model):
+    """
+    Implements a model for producing simulated spin-echo data
+    """
+    NAME = "spin_echo"
+
+    def __init__(self, ivm):
+        DataModel.__init__(self, ivm, "Spin Echo")
+        self.gui.add("TR (s)", NumericOption(minval=0, maxval=10, default=4.8), key="tr")
+        self.gui.add("TE (ms)", NumericOption(minval=0, maxval=1000, default=0), key="te")
+
+    def get_timeseries(self, param_values):
+        tr = self.options["tr"]
+        te = self.options["te"]
+        t1 = param_values.get("t1", 1.3)
+        t2 = param_values.get("t2", 100)
+        pc = param_values.get("pc", 1)
+        # FIXME proton density?
+        return np.array([pc * (1-np.exp(-tr/t1)) * np.exp(-te/t2)])
+
+    @property
+    def params(self):
+        return [param for param in self.known_params if param.name in ("t1", "t2", "pc")]
+
+class FabberDataModel(DataModel):
+    """
+    Generates simulated data using Fabber
+    """
+    NAME = ""
+
+    def __init__(self, ivm, title):
+        DataModel.__init__(self, ivm, title)
+        from fabber import Fabber
+        search_dirs = get_plugins(key="fabber-dirs")
+        self._fab = Fabber(*search_dirs)
 
     @property
     def params(self):
