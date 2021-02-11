@@ -46,6 +46,23 @@ class DataModel(Model):
     def get_timeseries(self, param_values):
         raise NotImplementedError()
 
+class SpinEchoDataModel(Model):
+    """
+    Implements a model for producing simulated spin-echo data
+    """
+    def __init__(self, ivm, title):
+        DataModel.__init__(self, ivm, title)
+        self.gui.add("Number of volumes", NumericOption(minval=1, maxval=1000, default=1, intonly=True), key="nt")
+
+    def get_timeseries(self, param_values):
+        tr = param_values.get("tr", 4.8)
+        te = param_values.get("te", 0)
+        t1 = param_values.get("t1", 1.3)
+        t2 = param_values.get("t2", 100)
+        # FIXME partition coefficient / proton density?
+        ret = [(1-np.exp(-tr/t1)) * np.exp(-te/t2)] * self.options.get("nt", 1)
+        return np.array(ret)
+
 class FabberDataModel(DataModel):
     """
     Generates simulated data using Fabber
@@ -113,12 +130,14 @@ class FabberDataModel(DataModel):
         model_params = self._fab.get_model_params(self.fab_options)
         real_param_names = {}
         for param in model_params:
+            # Note that we do not worry if Fabber is returning parameters that are not in our list of
+            # known parameters. The data model is responsible for adding in values for these and if it
+            # does not an error will occur on evaluation of the model. For example static tissue signal
+            # in ASL may be derived from tissue properties (T1, T2 etc)
             for known_param in self.known_params:
                 if param.lower() == known_param.name.lower() or param in known_param.kwargs.get("aliases", []):
                     real_param_names[known_param.name] = param
                     break
-            if param not in real_param_names.values():
-                raise ValueError("Unrecognized model parameter: %s" % param)
         return real_param_names
 
     def get_timeseries(self, param_values):
@@ -131,7 +150,7 @@ class FabberDataModel(DataModel):
             real_param_values[real_param_names[k]] = v
         ts = self._fab.model_evaluate(self.fab_options, real_param_values, self.nt)
         LOG.debug("Fabbber timeseries %s", ts)
-        return ts
+        return np.array(ts)
 
     @property
     def fab_options(self):
@@ -155,7 +174,11 @@ class AslDataModel(FabberDataModel):
         self.gui.add("Bolus duration", NumericOption(minval=0, maxval=5, default=1.8), key="tau")
         self.gui.add("Labelling", ChoiceOption(["CASL/pCASL", "PASL"], [True, False], default=True), key="casl")
         self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
-        self.gui.add("Arterial component", BoolOption(), key="incart")
+        self.gui.add("Data format", ChoiceOption(["Differenced data", "Label/Control pairs"], ["diff", "tc"]), key="iaf")
+        self.gui.add("Inversion efficiency", NumericOption(minval=0.5, maxval=1.0, default=0.85), key="alpha")
+        self.gui.add("M0", NumericOption(minval=0, maxval=2000, default=1000), key="m0")
+        self.gui.add("Tissue/arterial partition coefficient", NumericOption(minval=0, maxval=1, default=0.9), key="pct")
+        #self.gui.add("Arterial component", BoolOption(), key="incart")
 
         self.known_params += [
             Parameter(
@@ -196,6 +219,24 @@ class AslDataModel(FabberDataModel):
             ),
         ]
 
+    def get_timeseries(self, param_values):
+        ts = FabberDataModel.get_timeseries(self, param_values)
+        ts = self.options["m0"] * self.options["alpha"] * ts / 6000
+
+        if self.options["iaf"] == "tc":
+            M0 = 1500
+            tr = np.array(self.options.get("plds", [1.0])) + self.options["tau"]
+            te = self.options.get("te", 0)
+            t1 = param_values.get("t1", 1.3)
+            t2 = param_values.get("t2", 100)
+            stattiss = self.options["pct"] * self.options["m0"] * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
+            tc = []
+            for idx, sig in enumerate(ts):
+                tc.append(stattiss[int(idx/2)] - sig)
+            return np.array(tc)
+        else:
+            return ts
+
     @property
     def fab_options(self):
         fab_options = {
@@ -208,11 +249,16 @@ class AslDataModel(FabberDataModel):
         for idx, pld in enumerate(plds):
             fab_options["pld%i" % (idx+1)] = pld
         fab_options.update(self.options)
+
+        for opt in ("m0", "alpha", "pct"):
+            fab_options.pop(opt, None)
+
         return fab_options
 
     @property
     def nt(self):
-        return len(self.options.get("plds", [1.0]))
+        diff = self.options.get("iaf", "diff") == "diff"
+        return len(self.options.get("plds", [1.0])) * (1 if diff else 2)
            
 class DscDataModel(FabberDataModel):
     """
