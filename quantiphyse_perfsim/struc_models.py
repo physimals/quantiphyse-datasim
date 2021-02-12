@@ -107,9 +107,9 @@ class PartialVolumeStructureModel(Model):
                     raise QpException("This structure model cannot handle multiple parameter values in a single structure")
                 single_values[k] = v[0]
 
-            timeseries = data_model.get_timeseries(single_values)
+            timeseries = data_model.get_timeseries(single_values, pv_map.grid.shape)
             if output_data is None:
-                output_data = np.zeros(list(pv_map.grid.shape) + [len(timeseries)], dtype=np.float32)
+                output_data = np.zeros(list(pv_map.grid.shape) + [timeseries.shape[-1]], dtype=np.float32)
                 output_grid = pv_map.grid
                 if output_param_maps:
                     param_maps = {}

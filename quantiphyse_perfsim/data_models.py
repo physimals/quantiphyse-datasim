@@ -98,7 +98,17 @@ class DataModel(Model):
             ),
         ]
 
-    def get_timeseries(self, param_values):
+    def get_timeseries(self, param_values, shape=None):
+        """
+        Get the data model time series for a set of parameter values
+
+        :param param_values: Mapping from parameter name to value
+        :param shape: If specified, 3D output shape for the data being constructed.
+                      Data models may return either a 1D timeseries to 
+                      be used for all voxels, or a 4D voxelwise map. If shape is None
+                      a 1D timeseries must be returned
+        :return: 1D or 4D np.array containing the timeseries
+        """
         raise NotImplementedError()
 
 class SpinEchoDataModel(Model):
@@ -112,7 +122,7 @@ class SpinEchoDataModel(Model):
         self.gui.add("TR (s)", NumericOption(minval=0, maxval=10, default=4.8), key="tr")
         self.gui.add("TE (ms)", NumericOption(minval=0, maxval=1000, default=0), key="te")
 
-    def get_timeseries(self, param_values):
+    def get_timeseries(self, param_values, shape=None):
         tr = self.options["tr"]
         te = self.options["te"]
         t1 = param_values.get("t1", 1.3)
@@ -162,7 +172,7 @@ class FabberDataModel(DataModel):
                     break
         return real_param_names
 
-    def get_timeseries(self, param_values):
+    def get_timeseries(self, param_values, shape=None):
         LOG.debug("Fabbber options %s", self.fab_options)
         real_param_values = {}
         real_param_names = self.real_param_names
@@ -192,10 +202,12 @@ class AslDataModel(FabberDataModel):
     
     def __init__(self, ivm):
         FabberDataModel.__init__(self, ivm, "Arterial Spin Labelling")
+        self.slicet = 0
 
         self.gui.add("Bolus duration", NumericOption(minval=0, maxval=5, default=1.8), key="tau")
         self.gui.add("Labelling", ChoiceOption(["CASL/pCASL", "PASL"], [True, False], default=True), key="casl")
         self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
+        self.gui.add("Time per slice (ms)", NumericOption(minval=0, maxval=1000, default=0, intonly=True), key="slicedt")
         self.gui.add("Data format", ChoiceOption(["Differenced data", "Label/Control pairs"], ["diff", "tc"]), key="iaf")
         self.gui.add("Repeats", NumericOption(minval=1, maxval=100, default=1, intonly=True), key="repeats")
         self.gui.add("Group by", ChoiceOption(["PLDs", "Repeats"], ["tis", "rpt"]), key="ibf")
@@ -245,23 +257,36 @@ class AslDataModel(FabberDataModel):
             ),
         ]
 
-    def get_timeseries(self, param_values):
+    def get_timeseries(self, param_values, shape=None):
+        options = self.options
+        if shape is not None and options["slicedt"] != 0:
+            ret = np.zeros(list(shape) + [self.nt], dtype=np.float32)
+            for z in range(shape[2]):
+                self.slicet = z*float(options["slicedt"])/1000
+                ret[:, :, z, :] = self._get_slice_timeseries(param_values)
+            self.slicet = 0
+        else:
+            self.slicet = 0
+            ret = self._get_slice_timeseries(param_values)
+        return ret
+
+    def _get_slice_timeseries(self, param_values):
+        options = self.options
         ts = FabberDataModel.get_timeseries(self, param_values)
-        ts = self.options["m0"] * self.options["alpha"] * ts / 6000
-        nrpt = self.options["repeats"]
+        ts = options["m0"] * options["alpha"] * ts / 6000
+        nrpt = options["repeats"]
 
         # For tag control pairs calculate static tissue signal at each
         # PLD and add to Fabber timeseries. Note that fabber by default
         # uses zero for control images and by default groups by repeats
-        if self.options["iaf"] == "tc":
-            M0 = 1500
-            tis = np.array(self.options["plds"]) + self.options["tau"]
-            tr = self.options["tr"]
-            te = self.options["te"]
+        if options["iaf"] == "tc":
+            tis = np.array(options["plds"]) + options["tau"] + self.slicet
+            tr = options["tr"]
+            te = options["te"]
             t1 = param_values.get("t1", 1.3)
             t2 = param_values.get("t2", 100)
             t1b = param_values.get("t1b", 1.65)
-            stattiss = self.options["pct"] * self.options["m0"] * np.exp(-tis/t1b) * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
+            stattiss = options["pct"] * options["m0"] * np.exp(-tis/t1b) * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
             tc = []
             for idx, sig in enumerate(ts):
                 tc.append(stattiss[int(idx/(2*nrpt))] - sig)
@@ -271,10 +296,10 @@ class AslDataModel(FabberDataModel):
 
         # If we are grouping by TIs we need to reorder the timeseries so all the
         # full set of TIs is together and then repeated
-        if self.options["ibf"] == "tis":
+        if options["ibf"] == "tis":
             reordered = []
-            npld = len(self.options["plds"])
-            ntc = 1 if self.options["iaf"] == "diff" else 2
+            npld = len(options["plds"])
+            ntc = 1 if options["iaf"] == "diff" else 2
             for pld in range(npld):
                 for rpt in range(nrpt):
                     for tc in range(ntc):
@@ -291,20 +316,20 @@ class AslDataModel(FabberDataModel):
             "incbat" : True,
             "inct1" : True,
         }
-        plds = self.options.get("plds", [1.0])
+        plds = self.options["plds"]
         for idx, pld in enumerate(plds):
-            fab_options["pld%i" % (idx+1)] = pld
+            fab_options["pld%i" % (idx+1)] = pld + self.slicet
         fab_options.update(self.options)
 
-        for opt in ("m0", "alpha", "pct"):
+        for opt in ("m0", "alpha", "pct", "slicedt"):
             fab_options.pop(opt, None)
 
         return fab_options
 
     @property
     def nt(self):
-        diff = self.options.get("iaf", "diff") == "diff"
-        return len(self.options.get("plds", [1.0])) * (1 if diff else 2) * self.options["repeats"]
+        diff = self.options["iaf"] == "diff"
+        return len(self.options["plds"]) * (1 if diff else 2) * self.options["repeats"]
            
 class DscDataModel(FabberDataModel):
     """
