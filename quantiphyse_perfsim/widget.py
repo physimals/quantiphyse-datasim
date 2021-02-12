@@ -169,7 +169,7 @@ class NoiseOptions(OptionsWidget):
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
-        self.options.add("Additive noise (% of mean)", NumericOption(minval=0, maxval=200, default=10, intonly=True), checked=True, key="percent")
+        self.options.add("Noise SNR", NumericOption(minval=0.1, maxval=100, default=10), checked=True, key="snr")
         self.options.sig_changed.connect(self.sig_changed.emit)
         main_vbox.addWidget(self.options)
 
@@ -291,9 +291,10 @@ class PerfSimWidget(QpWidget):
         ]
 
         noise_opts = self.noise.options.values()
-        if "percent" in noise_opts:
+        if "snr" in noise_opts:
             noise_opts.update({
                 "data" : opts["output"],
+                "roi" : opts["output"] + "_roi",
                 "output-name" : opts["output"],
             })
             processes.append({"AddNoise" : noise_opts})

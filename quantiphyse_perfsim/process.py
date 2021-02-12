@@ -9,6 +9,7 @@ Copyright (c) 2016-2017 University of Oxford, Martin Craig
 
 import numpy as np
 
+from quantiphyse.data import NumpyData
 from quantiphyse.processes import Process
 from quantiphyse.utils import QpException
 
@@ -70,3 +71,7 @@ class PerfSimProcess(Process):
 
         output_name = options.pop("output", "sim_data")
         self.ivm.add(sim_data, name=output_name, make_current=True)
+
+        output_roi = output_name + "_roi"
+        roi = NumpyData(np.array(sim_data.raw()[..., 0] > 0, dtype=np.int), grid=sim_data.grid, roi=True, name=output_roi)
+        self.ivm.add(roi, make_current=False)
