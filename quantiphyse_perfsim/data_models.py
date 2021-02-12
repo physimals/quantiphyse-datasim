@@ -197,8 +197,12 @@ class AslDataModel(FabberDataModel):
         self.gui.add("Labelling", ChoiceOption(["CASL/pCASL", "PASL"], [True, False], default=True), key="casl")
         self.gui.add("PLDs", NumberListOption([0.25, 0.5, 0.75, 1.0, 1.25, 1.5]), key="plds")
         self.gui.add("Data format", ChoiceOption(["Differenced data", "Label/Control pairs"], ["diff", "tc"]), key="iaf")
+        self.gui.add("Repeats", NumericOption(minval=1, maxval=100, default=1, intonly=True), key="repeats")
+        self.gui.add("Group by", ChoiceOption(["PLDs", "Repeats"], ["tis", "rpt"]), key="ibf")
         self.gui.add("Inversion efficiency", NumericOption(minval=0.5, maxval=1.0, default=0.85), key="alpha")
         self.gui.add("M0", NumericOption(minval=0, maxval=2000, default=1000), key="m0")
+        self.gui.add("TR (s)", NumericOption(minval=0, maxval=10, default=4), key="tr")
+        self.gui.add("TE (ms)", NumericOption(minval=0, maxval=1000, default=13), key="te")
         self.gui.add("Tissue/arterial partition coefficient", NumericOption(minval=0, maxval=1, default=0.9), key="pct")
         #self.gui.add("Arterial component", BoolOption(), key="incart")
 
@@ -244,20 +248,38 @@ class AslDataModel(FabberDataModel):
     def get_timeseries(self, param_values):
         ts = FabberDataModel.get_timeseries(self, param_values)
         ts = self.options["m0"] * self.options["alpha"] * ts / 6000
+        nrpt = self.options["repeats"]
 
+        # For tag control pairs calculate static tissue signal at each
+        # PLD and add to Fabber timeseries. Note that fabber by default
+        # uses zero for control images and by default groups by repeats
         if self.options["iaf"] == "tc":
             M0 = 1500
-            tr = np.array(self.options.get("plds", [1.0])) + self.options["tau"]
-            te = self.options.get("te", 0)
+            tr = self.options["tr"]
+            te = self.options["te"]
             t1 = param_values.get("t1", 1.3)
             t2 = param_values.get("t2", 100)
             stattiss = self.options["pct"] * self.options["m0"] * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
             tc = []
             for idx, sig in enumerate(ts):
-                tc.append(stattiss[int(idx/2)] - sig)
-            return np.array(tc)
-        else:
-            return ts
+                tc.append(stattiss - sig)
+            ts = np.array(tc)
+
+        ret = np.tile(ts, nrpt)
+
+        # If we are grouping by TIs we need to reorder the timeseries so all the
+        # full set of TIs is together and then repeated
+        if self.options["ibf"] == "tis":
+            reordered = []
+            npld = len(self.options["plds"])
+            ntc = 1 if self.options["iaf"] == "diff" else 2
+            for pld in range(npld):
+                for rpt in range(nrpt):
+                    for tc in range(ntc):
+                        reordered.append(ret[pld*nrpt*ntc + rpt*ntc + tc])
+            ret = np.array(reordered)
+
+        return ret
 
     @property
     def fab_options(self):
@@ -280,7 +302,7 @@ class AslDataModel(FabberDataModel):
     @property
     def nt(self):
         diff = self.options.get("iaf", "diff") == "diff"
-        return len(self.options.get("plds", [1.0])) * (1 if diff else 2)
+        return len(self.options.get("plds", [1.0])) * (1 if diff else 2) * self.options["repeats"]
            
 class DscDataModel(FabberDataModel):
     """
