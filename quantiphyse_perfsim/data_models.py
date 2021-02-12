@@ -255,14 +255,16 @@ class AslDataModel(FabberDataModel):
         # uses zero for control images and by default groups by repeats
         if self.options["iaf"] == "tc":
             M0 = 1500
+            tis = np.array(self.options["plds"]) + self.options["tau"]
             tr = self.options["tr"]
             te = self.options["te"]
             t1 = param_values.get("t1", 1.3)
             t2 = param_values.get("t2", 100)
-            stattiss = self.options["pct"] * self.options["m0"] * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
+            t1b = param_values.get("t1b", 1.65)
+            stattiss = self.options["pct"] * self.options["m0"] * np.exp(-tis/t1b) * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
             tc = []
             for idx, sig in enumerate(ts):
-                tc.append(stattiss - sig)
+                tc.append(stattiss[int(idx/(2*nrpt))] - sig)
             ts = np.array(tc)
 
         ret = np.tile(ts, nrpt)
