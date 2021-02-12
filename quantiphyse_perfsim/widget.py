@@ -210,6 +210,14 @@ class ParamsOptions(OptionsWidget):
         main_vbox.addWidget(self._params)
         main_vbox.addStretch(1)
 
+    def set_models(self, data_model, struc_model):
+        self._params.params = data_model.params
+        self._params.structures = struc_model.structures
+
+    @property
+    def options(self):
+        return self._params.values
+
 class OutputOptions(OptionsWidget):
     def __init__(self, ivm, parent):
         OptionsWidget.__init__(self, ivm, parent)
@@ -259,6 +267,8 @@ class PerfSimWidget(QpWidget):
         self.data_model = ModelOptions(self.ivm, parent=self, model_type="Data", abbrev="data", model_classes=get_data_models())
         self.data_model.sig_changed.connect(self._update_params)
         self.tabs.addTab(self.data_model, "Data model")
+        self.params = ParamsOptions(self.ivm, parent=self)
+        self.tabs.addTab(self.params, "Parameter values")
         self.noise = NoiseOptions(self.ivm, parent=self)
         self.tabs.addTab(self.noise, "Noise")
         self.motion = MotionOptions(self.ivm, parent=self)
@@ -266,17 +276,12 @@ class PerfSimWidget(QpWidget):
         self.output = OutputOptions(self.ivm, parent=self)
         self.tabs.addTab(self.output, "Output")
 
-        # Box which will be used to enter parameter values
-        self._params = ParamValuesGrid()
-        main_vbox.addWidget(self._params)
-
         main_vbox.addStretch(1)
         main_vbox.addWidget(RunWidget(self))
         self._update_params()
 
     def _update_params(self):
-        self._params.params = self.data_model.model.params
-        self._params.structures = self.struc_model.model.structures
+        self.params.set_models(self.data_model.model, self.struc_model.model)
 
     def processes(self):
         opts = self.output.options.values()
@@ -284,7 +289,7 @@ class PerfSimWidget(QpWidget):
         opts.update(self.data_model.options.values())
         opts["struc-model-options"] = self.struc_model.model.options
         opts["data-model-options"] = self.data_model.model.options
-        opts["param-values"] = self._params.values
+        opts["param-values"] = self.params.options
 
         processes = [
             {"PerfSim" : opts},
