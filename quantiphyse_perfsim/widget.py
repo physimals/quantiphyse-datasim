@@ -290,15 +290,6 @@ class PerfSimWidget(QpWidget):
             {"PerfSim" : opts},
         ]
 
-        noise_opts = self.noise.options.values()
-        if "snr" in noise_opts:
-            noise_opts.update({
-                "data" : opts["output"],
-                "roi" : opts["output"] + "_roi",
-                "output-name" : opts["output"],
-            })
-            processes.append({"AddNoise" : noise_opts})
-
         motion_opts = self.motion.options.values()
         if motion_opts.pop("motion"):
             motion_opts.update({
@@ -325,5 +316,16 @@ class PerfSimWidget(QpWidget):
                 "order" : 1,
             }
             processes.append({"Resample" : res_opts})
+
+        noise_opts = self.noise.options.values()
+        if "snr" in noise_opts:
+            noise_opts.update({
+                "data" : opts["output"],
+                "roi" : opts["output"] + "_roi",
+                "output-name" : opts["output"],
+            })
+            processes.append({"AddNoise" : noise_opts})
+
+        processes.append({"Delete" : {opts["output"] + "_roi" : ""}})
 
         return processes
