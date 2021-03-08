@@ -14,13 +14,7 @@ import time
 
 import numpy as np
 
-try:
-    from PySide import QtGui, QtCore, QtGui as QtWidgets
-except ImportError:
-    from PySide2 import QtGui, QtCore, QtWidgets
-
 from quantiphyse.data import NumpyData, DataGrid, ImageVolumeManagement
-from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption, RunButton
 from quantiphyse.utils import QpException, get_plugins
 from quantiphyse.processes import Process
 
@@ -132,62 +126,6 @@ class PartialVolumeStructureModel(Model):
         else:
             return sim_data
 
-class AddEmbeddingDialog(QtGui.QDialog):
-    """
-    Dialog box enabling one item to be chosen from a list
-    """
-
-    def __init__(self, parent, ivm, existing_strucs):
-        super(AddEmbeddingDialog, self).__init__(parent)
-        self.ivm = ivm
-        self.sel_text = None
-        self.sel_data = None
-        self.existing_names = [struc.name for struc in existing_strucs]
-
-        self.setWindowTitle("Add embedding")
-        vbox = QtGui.QVBoxLayout()
-        self.setLayout(vbox)
-
-        self._opts = OptionBox()
-        pvmap = self._opts.add("PV map / mask", DataOption(ivm, data=True, rois=True), key="pvmap")
-        pvmap.sig_changed.connect(self._pvmap_changed)
-        name = self._opts.add("Name of embedded structure", TextOption(), key="name")
-        name.textChanged.connect(self._name_changed)
-        self._opts.add("Structure type", ChoiceOption(["Embedding", "Activation mask", "Additional PVE"], return_values=["embed", "act", "add"]), key="type")
-        self._opts.add("Parent structure", ChoiceOption([s.display_name for s in existing_strucs], [s.name for s in existing_strucs]), key="parent")
-        vbox.addWidget(self._opts)
-
-        self.button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(False)
-        vbox.addWidget(self.button_box)
-
-    def _pvmap_changed(self):
-        if self.name == "" and self.pvmap:
-            qpdata = self.ivm.data[self.pvmap]
-            self._opts.option("name").value = qpdata.name
-
-    def _name_changed(self):
-        accept = self.name != "" and self.name not in self.existing_names
-        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(accept)
-
-    @property
-    def pvmap(self):
-        return self._opts.option("pvmap").value
-
-    @property
-    def name(self):
-        return self._opts.option("name").value
-
-    @property
-    def struc_type(self):
-        return self._opts.option("type").value
-
-    @property
-    def parent_struc(self):
-        return self._opts.option("parent").value
-
 class UserPvModel(PartialVolumeStructureModel):
     """
     Structural model where user supplies partial volume maps
@@ -219,95 +157,30 @@ class UserPvModel(PartialVolumeStructureModel):
             Parameter("wm", "White matter"),
             Parameter("csf", "CSF"),
         ]
-        self.nongui_options = {"additional" : {}}
-        self._refresh_opts()
-
-    def _refresh_opts(self):
-        options = self.options
-        self.gui.clear()
-        for struc in self.default_strucs:
-            data_opt = self.gui.add("%s map" % struc.name.upper(), DataOption(self.ivm, explicit=True), checked=True, enabled=struc.name in options["pvmaps"], key=struc.name)
-            data_opt.value = options["pvmaps"].get(struc.name, None)
-        for struc in self.nongui_options["additional"].values():
-            del_btn = self._struc_delete_btn(struc)
-            display_type = {"add" : "map", "embed" : "embedding", "act" : "mask"}.get(struc["struc_type"], "map")
-            data_opt = self.gui.add("%s %s" % (struc["name"], display_type), DataOption(self.ivm, explicit=True, rois=True), del_btn, key=struc["name"])
-            data_opt.value = struc.get("pvmap", None)
-        self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
-
-    def _struc_delete_btn(self, add_struc):
-        def _del_cb():
-            self._del_struc(add_struc["name"])
-
-        btn = QtGui.QPushButton("Delete")
-        btn.clicked.connect(_del_cb)
-        return btn
-
-    def _del_struc(self, name):
-        self.nongui_options["additional"].pop(name, None)
-        self._refresh_opts()
-
-    @property
-    def options(self):
-        opts = {
-            "pvmaps" : self.gui.values()
-        }
-        opts.update(self.nongui_options)
-        return opts
-
-    @options.setter
-    def options(self, options):
-        self.nongui_options["additional"] = options.pop("additional", {})
-        self._refresh_opts()
-
-        for k, v in options.pop("pvmaps", {}).items():
-            try:
-                if self.gui.has_option(k):
-                    if not self.gui.option(k).isEnabled():
-                        self.gui.set_checked(k, True)
-                    self.gui.option(k).value = v
-                else:
-                    raise QpException("PV map '%s' given for unrecognized structure '%s'" % (v, k))
-            except ValueError:
-                raise QpException("Invalid value for option '%s': '%s'" % (k, v))
-
-    def _add_embedding(self):
-        dialog = AddEmbeddingDialog(self.gui, self.ivm, self.default_strucs)
-        try:
-            accept = dialog.exec_()
-        except:
-            import traceback
-            traceback.print_exc()
-        if accept:
-            self.nongui_options["additional"][dialog.name] = {"name" : dialog.name, "struc_type" : dialog.struc_type, "parent_struc" : dialog.parent_struc, "pvmap" : dialog.pvmap}
-            options = self.options
-            self._refresh_opts()
-            self.options = options
 
     @property
     def structures(self):
         ret = [struc for struc in self.default_strucs if struc.name in self.options["pvmaps"]]
-        for struc in self.nongui_options["additional"].values():
+        for struc in self.options["additional"].values():
             ret.append(Parameter(**struc))
         return ret
 
     @property
     def structure_maps(self):
-        options = self.options
-        pvmaps = options["pvmaps"]
+        pvmaps = self.options["pvmaps"]
         try:
             ret = {}
             total_pv = None
             for struc in self.default_strucs:
                 if struc.name in pvmaps:
-                    ret[struc.name] = self.ivm.data[pvmaps[struc.name]]
+                    ret[struc.name] = self._ivm.data[pvmaps[struc.name]]
                     if total_pv is None:
                         total_pv = np.zeros(ret[struc.name].grid.shape, dtype=np.float32)
                     total_pv += ret[struc.name].raw()
 
             # Additional structures
-            for struc in self.nongui_options["additional"].values():
-                data = self.ivm.data[pvmaps[struc["name"]]]
+            for struc in self.options["additional"].values():
+                data = self._ivm.data[pvmaps[struc["name"]]]
                 struc_type = struc.get("struc_type", "")
                 if struc_type == "embed":
                     # Embedding - we need to downweight existing structure PVs so they all sum to 1 at most
@@ -356,9 +229,7 @@ class FastStructureModel(PartialVolumeStructureModel):
 
     def __init__(self, ivm):
         StructureModel.__init__(self, ivm, "Partial volume maps from a FAST segmentation")
-        self.gui.add("Structural image (brain extracted)", DataOption(self.ivm, explicit=True), key="struc")
-        self.gui.add("Image type", ChoiceOption(["T1 weighted", "T2 weighted", "Proton Density"], return_values=[1, 2, 3]), key="type")
-        
+       
     @property
     def structures(self):
         return [
@@ -374,10 +245,10 @@ class FastStructureModel(PartialVolumeStructureModel):
             raise QpException("Can't identify Fast process")
         
         struc = self.options.get("struc", None)
-        if struc not in self.ivm.data:
+        if struc not in self._ivm.data:
             raise QpException("Structural image not loaded: %s" % struc)
         
-        qpdata = self.ivm.data[struc]
+        qpdata = self._ivm.data[struc]
         ivm = ImageVolumeManagement()
         ivm.add(qpdata)
         process = processes[0](ivm)
@@ -398,7 +269,6 @@ class FastStructureModel(PartialVolumeStructureModel):
         # FIXME hack
         process._complete()
 
-        options = self.options
         return {
             "gm" : ivm.data["%s_pve_1" % qpdata.name],
             "wm" : ivm.data["%s_pve_2" % qpdata.name],
@@ -443,11 +313,9 @@ class FslStdStructureModel(PartialVolumeStructureModel):
                         name = atlas.name + " %.2gx%.2gx%.2g mm" % pixdim
                         self._atlases[name] = (atlas, pixdim)
 
-        self.gui.add("Atlas", ChoiceOption(list(self._atlases.keys())), key="atlas")
-
     @property
     def structures(self):
-        atlas, pixdims = self._atlases[self.gui.option("atlas").value]
+        atlas, pixdims = self._atlases[self.options["atlas"]]
         structures = []
         for label in atlas.labels:
             structures.append(Parameter(label.name, label.name))
@@ -455,7 +323,7 @@ class FslStdStructureModel(PartialVolumeStructureModel):
 
     @property
     def structure_maps(self):
-        atlas, pixdims = self._atlases[self.gui.option("atlas").value]
+        atlas, pixdims = self._atlases[self.options["atlas"]]
         structure_maps = {}
         atlas_map = self._registry.loadAtlas(atlas.atlasID, loadSummary=False, resolution=pixdims[0])
         for idx, label in enumerate(atlas.labels):
@@ -475,7 +343,6 @@ class CheckerboardModel(StructureModel):
 
     def __init__(self, ivm):
         StructureModel.__init__(self, ivm, "Checkerboard")
-        self.gui.add("Number of voxels per patch (approx)", NumericOption(minval=1, maxval=1000, default=20, intonly=True), key="voxels-per-patch")
 
     @property
     def structures(self):

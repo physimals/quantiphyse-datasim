@@ -18,6 +18,12 @@ from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOp
 from ._version import __version__
 from .data_models import get_data_models
 from .struc_models import get_struc_models
+from .data_model_views import *
+from .struc_model_views import *
+
+def get_view_class(model_class):
+    view_name = model_class.__name__ + "View"
+    return globals().get(view_name, None)
 
 class ParamValuesGrid(QtGui.QGroupBox):
     """
@@ -125,17 +131,18 @@ class OptionsWidget(QtGui.QWidget):
 class ModelOptions(OptionsWidget):
     def __init__(self, ivm, parent, model_type, abbrev, model_classes):
         OptionsWidget.__init__(self, ivm, parent)
-        self._models = {}
+        self._views = {}
         self.model = None
+        self.view = None
         self._option_name = "%s-model" % abbrev
         for name, cls in model_classes.items():
-            self._models[name] = cls(self.ivm)
+            self._views[name] = get_view_class(cls)(ivm)
 
         main_vbox = QtGui.QVBoxLayout()
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
-        self.options.add("%s model" % model_type, ChoiceOption([m.display_name for m in self._models.values()], self._models.keys()), key=self._option_name)
+        self.options.add("%s model" % model_type, ChoiceOption([v.model.display_name for v in self._views.values()], self._views.keys()), key=self._option_name)
         self.options.option(self._option_name).sig_changed.connect(self._model_changed)
         main_vbox.addWidget(self.options)
 
@@ -145,20 +152,24 @@ class ModelOptions(OptionsWidget):
 
     def _create_guis(self, main_vbox):
         # Create the GUIs for models - only one visible at a time!
-        for model in self._models.values():
-            if model.gui is not None:
-                model.gui.setVisible(False)
-                if isinstance(model.gui, QtGui.QWidget):
-                    main_vbox.addWidget(model.gui)
+        for view in self._views.values():
+            if view.gui is not None:
+                view.gui.setVisible(False)
+                if isinstance(view.gui, QtGui.QWidget):
+                    main_vbox.addWidget(view.gui)
                 else:
-                    main_vbox.addLayout(model.gui)
-                model.sig_changed.connect(self.sig_changed.emit)
-
+                    main_vbox.addLayout(view.gui)
+                view.model.options.sig_changed.connect(self._model_option_changed)
+                
     def _model_changed(self):
         chosen_name = self.options.option(self._option_name).value
-        self.model = self._models[chosen_name]
-        for name, model in self._models.items():
-            model.gui.setVisible(chosen_name == name)
+        self.view = self._views[chosen_name]
+        self.model = self.view.model
+        for name, view in self._views.items():
+            view.gui.setVisible(chosen_name == name)
+        self.sig_changed.emit()
+
+    def _model_option_changed(self, _key, _value):
         self.sig_changed.emit()
 
 class NoiseOptions(OptionsWidget):
