@@ -35,6 +35,7 @@ class SpinEchoDataModelView:
         self.gui = OptionBox()
         self.gui.add("TR (s)", NumericOption(minval=0, maxval=10, default=4.8), key="tr")
         self.gui.add("TE (ms)", NumericOption(minval=0, maxval=1000, default=0), key="te")
+        self.gui.add("M0", NumericOption(minval=0, maxval=10000, default=1000), key="m0")
         self.gui.sig_changed.connect(self._update_options)
         self._update_options()
 

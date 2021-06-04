@@ -117,11 +117,12 @@ class SpinEchoDataModel(Model):
     def get_timeseries(self, param_values, shape=None):
         tr = self.options["tr"]
         te = self.options["te"]
+        m0 = self.options.get("m0", 1000)
         t1 = param_values.get("t1", 1.3)
         t2 = param_values.get("t2", 100)
         pc = param_values.get("pc", 1)
         # FIXME proton density?
-        return np.array([pc * (1-np.exp(-tr/t1)) * np.exp(-te/t2)])
+        return np.array([m0 * pc * (1-np.exp(-tr/t1)) * np.exp(-te/t2)])
 
     @property
     def params(self):
@@ -261,7 +262,7 @@ class AslDataModel(FabberDataModel):
             t1 = param_values.get("t1", 1.3)
             t2 = param_values.get("t2", 100)
             t1b = param_values.get("t1b", 1.65)
-            stattiss = self.options["pct"] * self.options["m0"] * np.exp(-tis/t1b) * (1-np.exp(-tr/t1)) * np.exp(-te/t2)
+            stattiss = np.tile(self.options["pct"] * self.options["m0"] * (1-np.exp(-tr/t1)) * np.exp(-te/t2), len(tis))
             tc = []
             for idx, sig in enumerate(ts):
                 tc.append(stattiss[int(idx/(2*nrpt))] - sig)
