@@ -340,6 +340,10 @@ class PerfSimWidget(QpWidget):
                 "roi" : opts["output"] + "_roi",
                 "output-name" : opts["output"],
             })
+            # Hack to support ASL TC data where the 'signal' is the difference
+            # not the magnitude of the static signal
+            if opts["data-model"] == "asl" and opts["data-model-options"].get("iaf", "diff") in ("tc", "ct"):
+                noise_opts["mode"] = "diff"
             processes.append({"AddNoise" : noise_opts})
 
         processes.append({"Delete" : {opts["output"] + "_roi" : ""}})
