@@ -77,6 +77,7 @@ class ParamValuesGrid(QtGui.QGroupBox):
         """
         ret = {}
         for structure_idx, structure in enumerate(self._structures):
+            ret[structure.name] = {}
             if structure.name not in self._values:
                 self._values[structure.name] = {}
             for param_idx, param in enumerate(self._params):
@@ -86,9 +87,9 @@ class ParamValuesGrid(QtGui.QGroupBox):
                     vals = vals[0]
                 self._values[structure.name][param.name] = vals
 
-            # We keep records of test values for data structures that aren't in the
-            # current list, so need to be careful to only return the ones that are
-            ret[structure.name] = dict(self._values[structure.name])
+                # We keep records in self._values for data structures/params that aren't in the
+                # current list, so need to be careful to only return the ones that are
+                ret[structure.name][param.name] = vals
 
         return ret
 
