@@ -18,12 +18,15 @@ from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOp
 from ._version import __version__
 from .data_models import get_data_models
 from .struc_models import get_struc_models
-from .data_model_views import *
-from .struc_model_views import *
+from . import data_model_views
+from . import struc_model_views
 
 def get_view_class(model_class):
     view_name = model_class.__name__ + "View"
-    return globals().get(view_name, None)
+    cls = getattr(data_model_views, view_name, None)
+    if cls is None:
+        cls = getattr(struc_model_views, view_name, None)
+    return cls
 
 class ParamValuesGrid(QtGui.QGroupBox):
     """
