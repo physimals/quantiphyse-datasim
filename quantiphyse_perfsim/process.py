@@ -73,5 +73,9 @@ class PerfSimProcess(Process):
         self.ivm.add(sim_data, name=output_name, make_current=True)
 
         output_roi = output_name + "_roi"
-        roi = NumpyData(np.array(sim_data.raw()[..., 0] > 0, dtype=np.int), grid=sim_data.grid, roi=True, name=output_roi)
+        if sim_data.ndim > 3:
+            roi_data = sim_data.raw()[..., 0]
+        else:
+            roi_data = sim_data.raw()
+        roi = NumpyData(np.array(roi_data > 0, dtype=np.int), grid=sim_data.grid, roi=True, name=output_roi)
         self.ivm.add(roi, make_current=False)
