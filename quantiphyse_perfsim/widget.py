@@ -244,18 +244,22 @@ class OutputOptions(OptionsWidget):
         self.options.add("Output name", TextOption("sim_data"), key="output")
         self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
         self.options.add("Output clean data (no noise/motion)", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
-        self.options.add("Resample for output", ChoiceOption(["Downsample", "From another data set"], ["down", "data"]), checked=True, key="output-res")
+        self.options.add("Resample for output", ChoiceOption(["Downsample", "From another data set", "Specified resolution"], ["down", "data", "res"]), checked=True, key="output-res")
         self.options.add("Output space from", DataOption(ivm), key="output-space")
         self.options.add("Output resample factor", NumericOption(intonly=True, minval=1, maxval=10, default=2), key="output-downsample")
+        self.options.add("Voxel sizes (mm)", NumberListOption(), key="voxel-sizes")
         self.options.option("output-res").sig_changed.connect(self._output_res_changed)
         main_vbox.addWidget(self.options)
         main_vbox.addStretch(1)
         self._output_res_changed()
 
     def _output_res_changed(self):
-        output_res = self.options.values().get("output-res", None)
-        self.options.set_visible("output-space", output_res == "data")
-        self.options.set_visible("output-downsample", output_res == "down")
+        resample_type = self.options.values().pop("output-res", "")
+        self.options.set_visible("output-space", resample_type == "data")
+        self.options.set_visible("output-downsample", resample_type in ("up", "down"))
+        #self.options.set_visible("order", resample_type != "down")
+        #self.options.set_visible("2d", resample_type in ("up", "down"))
+        self.options.set_visible("voxel-sizes", resample_type == "res")
 
 class PerfSimWidget(QpWidget):
     """
@@ -334,6 +338,15 @@ class PerfSimWidget(QpWidget):
                 "grid" : opts.pop("output-space"),
                 "type" : "data",
                 "order" : 1,
+            }
+            processes.append({"Resample" : res_opts})
+        elif output_res == "res":
+            res_opts = {
+                "data" : opts["output"],
+                "output-name" : opts["output"],
+                "type" : "res",
+                "order" : 1,
+                "voxel-sizes" : opts.pop("voxel-sizes")
             }
             processes.append({"Resample" : res_opts})
 
