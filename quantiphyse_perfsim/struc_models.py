@@ -65,6 +65,36 @@ class PartialVolumeStructureModel(Model):
         """
         raise NotImplementedError()
 
+    def resamp(self, qpdata):
+        """
+        Resample a map according to resampling options
+        """
+        resamp_options = dict(self.options.get("resampling", {}))
+        if resamp_options:
+            resamp_processes = get_plugins("processes", "ResampleProcess")
+            if len(resamp_processes) != 1:
+                raise QpException("Can't identify Resampling process")
+
+            ivm = ImageVolumeManagement()
+            ivm.add(qpdata)
+            process = resamp_processes[0](ivm)
+            resamp_options.update({
+                "data" : qpdata.name,
+                "output-name" : "output_res"
+            })
+            process.execute(resamp_options)
+            while process.status == Process.RUNNING:
+                time.sleep(1)
+
+            if process.status == Process.FAILED:
+                raise process.exception
+
+            # FIXME hack
+            process._complete()
+            return ivm.data["output_res"]
+        else:
+            return qpdata
+
     def get_simulated_data(self, data_model, param_values, output_param_maps=False):
         """
         Generic implementation to generate test data from a set of partial volume maps
@@ -215,12 +245,39 @@ class UserPvModel(PartialVolumeStructureModel):
                     else:
                         raise QpException("Unknown additional structure type: %s" % struc_type)
 
+            # Resample PV maps according to specification
+            # Note that resampling can lead to situations where the sum of the partial volumes
+            # in the resampled maps is >1 in some voxels, even where this was not true in the
+            # original maps. We need to detect this and rescale the affected voxels
+            sum_map_pre = None
+            sum_map_post = None
+            for name in list(ret.keys()):
+                pre = ret[name]
+                if sum_map_pre is None:
+                    sum_map_pre = np.zeros(pre.raw().shape, dtype=np.float32)
+                sum_map_pre += pre.raw()
+
+                post = self.resamp(pre)
+                if sum_map_post is None:
+                    sum_map_post = np.zeros(post.raw().shape, dtype=np.float32)
+                sum_map_post += post.raw()
+                ret[name] = post
+
+            if sum_map_post is not None and np.all(sum_map_pre <= 1) and not np.all(sum_map_post <= 1):
+                # Resampling has messed up the PV sum a bit - rescale to fix this but only in affected
+                # voxels
+                self.debug("Max PV in resampled maps is %f: rescaling in %i voxels" % (np.max(sum_map_post), np.count_nonzero(sum_map_post > 1)))
+                for name in list(ret.keys()):
+                    pv_map = ret[name].raw()
+                    pv_map[sum_map_post > 1] /= sum_map_post[sum_map_post > 1]
+
             return ret
         except KeyError as exc:
             raise
             #raise QpException("No structure map defined: %s" % str(exc.args[0]))
 
     def _reweight(self, strucs, to_pv):
+        # FIXME
         pass
 
 class FastStructureModel(PartialVolumeStructureModel):

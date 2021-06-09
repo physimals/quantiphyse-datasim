@@ -36,22 +36,20 @@ class PerfSimProcess(Process):
         if data_model is None:
             raise QpException("Unknown data model: %s" % data_model_name)
         data_model = data_model(self.ivm)
-        self.log("Created data model: %s\n" % data_model_name)
-
         data_model_options = options.pop("data-model-options", {})
         data_model.options = data_model_options
+        self.log("Created data model: %s\n" % data_model_name)
 
         struc_model_name = options.pop("struc-model", None)
         struc_model_options = options.pop("struc-model-options", {})
         if struc_model_name is None:
             raise QpException("Structure model not specified")
-        self.log("Created structure model: %s\n" % struc_model_name)
-
         struc_model = self._struc_models.get(struc_model_name, None)
         if struc_model is None:
             raise QpException("Unknown structure model: %s" % struc_model_name)
         struc_model = struc_model(self.ivm)
         struc_model.options = struc_model_options
+        self.log("Created structure model: %s\n" % struc_model_name)
 
         param_values = options.pop("param-values", {})
         output_param_maps = options.pop("output-param-maps", False)

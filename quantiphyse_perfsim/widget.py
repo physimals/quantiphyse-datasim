@@ -14,6 +14,7 @@ except ImportError:
 
 from quantiphyse.gui.widgets import QpWidget, Citation, TitleWidget, RunWidget, WarningBox
 from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption
+from quantiphyse.utils import QpException
 
 from ._version import __version__
 from .data_models import get_data_models
@@ -244,22 +245,8 @@ class OutputOptions(OptionsWidget):
         self.options.add("Output name", TextOption("sim_data"), key="output")
         self.options.add("Output parameter maps", BoolOption(), default=False, key="output-param-maps")
         self.options.add("Output clean data (no noise/motion)", TextOption("sim_data_clean"), checked=True, default=True, key="output-clean")
-        self.options.add("Resample for output", ChoiceOption(["Downsample", "From another data set", "Specified resolution"], ["down", "data", "res"]), checked=True, key="output-res")
-        self.options.add("Output space from", DataOption(ivm), key="output-space")
-        self.options.add("Output resample factor", NumericOption(intonly=True, minval=1, maxval=10, default=2), key="output-downsample")
-        self.options.add("Voxel sizes (mm)", NumberListOption(), key="voxel-sizes")
-        self.options.option("output-res").sig_changed.connect(self._output_res_changed)
         main_vbox.addWidget(self.options)
         main_vbox.addStretch(1)
-        self._output_res_changed()
-
-    def _output_res_changed(self):
-        resample_type = self.options.values().pop("output-res", "")
-        self.options.set_visible("output-space", resample_type == "data")
-        self.options.set_visible("output-downsample", resample_type in ("up", "down"))
-        #self.options.set_visible("order", resample_type != "down")
-        #self.options.set_visible("2d", resample_type in ("up", "down"))
-        self.options.set_visible("voxel-sizes", resample_type == "res")
 
 class PerfSimWidget(QpWidget):
     """
@@ -282,17 +269,17 @@ class PerfSimWidget(QpWidget):
 
         self.struc_model = ModelOptions(self.ivm, parent=self, model_type="Structural", abbrev="struc", model_classes=get_struc_models())
         self.struc_model.sig_changed.connect(self._update_params)
-        self.tabs.addTab(self.struc_model, "Structure model")
         self.data_model = ModelOptions(self.ivm, parent=self, model_type="Data", abbrev="data", model_classes=get_data_models())
         self.data_model.sig_changed.connect(self._update_params)
-        self.tabs.addTab(self.data_model, "Data model")
         self.params = ParamsOptions(self.ivm, parent=self)
-        self.tabs.addTab(self.params, "Parameter values")
         self.noise = NoiseOptions(self.ivm, parent=self)
-        self.tabs.addTab(self.noise, "Noise")
         self.motion = MotionOptions(self.ivm, parent=self)
-        self.tabs.addTab(self.motion, "Motion")
         self.output = OutputOptions(self.ivm, parent=self)
+        self.tabs.addTab(self.struc_model, "Structure model")
+        self.tabs.addTab(self.data_model, "Data model")
+        self.tabs.addTab(self.params, "Parameter values")
+        self.tabs.addTab(self.noise, "Noise")
+        self.tabs.addTab(self.motion, "Motion")
         self.tabs.addTab(self.output, "Output")
 
         main_vbox.addStretch(1)
@@ -303,16 +290,14 @@ class PerfSimWidget(QpWidget):
         self.params.set_models(self.data_model.model, self.struc_model.model)
 
     def processes(self):
+        processes = []
         opts = self.output.options.values()
         opts.update(self.struc_model.options.values())
         opts.update(self.data_model.options.values())
         opts["struc-model-options"] = self.struc_model.model.options
         opts["data-model-options"] = self.data_model.model.options
         opts["param-values"] = self.params.options
-
-        processes = [
-            {"PerfSim" : opts},
-        ]
+        processes.append({"PerfSim" : opts})
 
         motion_opts = self.motion.options.values()
         if motion_opts.pop("motion"):
@@ -321,34 +306,6 @@ class PerfSimWidget(QpWidget):
                 "output-name" : opts["output"],
             })
             processes.append({"SimMotion" : motion_opts})
-
-        output_res = opts.pop("output-res", "")
-        if output_res == "down":
-            res_opts = {
-                "data" : opts["output"],
-                "output-name" : opts["output"],
-                "type" : "down",
-                "factor" : opts.pop("output-downsample")
-            }
-            processes.append({"Resample" : res_opts})
-        elif output_res == "data":
-            res_opts = {
-                "data" : opts["output"],
-                "output-name" : opts["output"],
-                "grid" : opts.pop("output-space"),
-                "type" : "data",
-                "order" : 1,
-            }
-            processes.append({"Resample" : res_opts})
-        elif output_res == "res":
-            res_opts = {
-                "data" : opts["output"],
-                "output-name" : opts["output"],
-                "type" : "res",
-                "order" : 1,
-                "voxel-sizes" : opts.pop("voxel-sizes")
-            }
-            processes.append({"Resample" : res_opts})
 
         noise_opts = self.noise.options.values()
         if "snr" in noise_opts:

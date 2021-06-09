@@ -88,6 +88,7 @@ class UserPvModelView:
     """
 
     def __init__(self, ivm):
+        self.ivm = ivm
         self.model = UserPvModel(ivm)
         self.model.options.update({
             "pvmaps" : {},
@@ -103,6 +104,7 @@ class UserPvModelView:
         for struc in self.model.default_strucs:
             data_opt = self.gui.add("%s map" % struc.name.upper(), DataOption(self.model._ivm, explicit=True), checked=True, enabled=struc.name in options["pvmaps"], key=struc.name)
             data_opt.value = options["pvmaps"].get(struc.name, None)
+
         for struc in options["additional"].values():
             del_btn = self._struc_delete_btn(struc)
             display_type = {"add" : "map", "embed" : "embedding", "act" : "mask"}.get(struc["struc_type"], "map")
@@ -110,8 +112,37 @@ class UserPvModelView:
             data_opt.value = struc.get("pvmap", None)
         self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
 
+        res_opts = options.get("resampling", {})
+        self.gui.add("Resampling", ChoiceOption(["Downsample", "From another data set", "Specified resolution"], ["down", "data", "res"], 
+                     default=res_opts.get("type", "data")), checked=True, enabled="type" in res_opts, key="type")
+        self.gui.add("Output space from", DataOption(self.ivm), key="grid")
+        self.gui.add("Output resample factor", NumericOption(intonly=True, minval=1, maxval=10, default=2), key="factor")
+        self.gui.add("Voxel sizes (mm)", NumberListOption(), key="voxel-sizes")
+        for opt in ("grid", "factor", "voxel-sizes"):
+            if opt in res_opts:
+                self.gui.option(opt).value = res_opts[opt]
+        self._update_resamp_visibility()
+
+    def _update_resamp_visibility(self):
+        resample_type = self.gui.values().pop("type", "")
+        self.gui.set_visible("grid", resample_type == "data")
+        self.gui.set_visible("factor", resample_type in ("up", "down"))
+        #self.gui.set_visible("order", resample_type != "down")
+        #self.gui.set_visible("2d", resample_type in ("up", "down"))
+        self.gui.set_visible("voxel-sizes", resample_type == "res")
+
     def _update_options(self):
-        self.model.options["pvmaps"] = self.gui.values()
+        self._update_resamp_visibility()
+        opts = self.gui.values()
+        self.model.options["pvmaps"] = {}
+        for struc in self.model.default_strucs:
+            if struc.name in opts:
+                self.model.options["pvmaps"][struc.name] = opts.pop(struc.name)
+
+        self.model.options["resampling"] = {}
+        for resamp_opt in ("type", "grid", "factor", "voxel-sizes"):
+            if resamp_opt in opts:
+                self.model.options["resampling"][resamp_opt] = opts.pop(resamp_opt)
 
     def _struc_delete_btn(self, add_struc):
         def _del_cb():
