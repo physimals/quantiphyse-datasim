@@ -5,7 +5,6 @@ Processing:
   - PerfSim: 
       output: sim_data
       output-param-maps: True
-      output-downsample: 2
       struc-model: checkerboard
       data-model: asl
       struc-model-options: 
@@ -54,7 +53,7 @@ Processing:
       inferart: False
       pvcorr: False
       wp: False
-      output-prefix: check_
+      output-prefix: asl_checkerboard_
       output_native: True
       output_struc: False
       output_mni: False
@@ -73,5 +72,4 @@ Processing:
 
 Cases:
   Test:
-
 
