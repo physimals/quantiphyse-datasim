@@ -134,15 +134,17 @@ class UserPvModelView:
     def _update_options(self):
         self._update_resamp_visibility()
         opts = self.gui.values()
-        self.model.options["pvmaps"] = {}
+        pvmaps = {}
         for struc in self.model.default_strucs:
             if struc.name in opts:
-                self.model.options["pvmaps"][struc.name] = opts.pop(struc.name)
+                pvmaps[struc.name] = opts[struc.name]
+        self.model.options["pvmaps"] = pvmaps
 
-        self.model.options["resampling"] = {}
+        resamp = {}
         for resamp_opt in ("type", "grid", "factor", "voxel-sizes"):
             if resamp_opt in opts:
-                self.model.options["resampling"][resamp_opt] = opts.pop(resamp_opt)
+                resamp["resampling"][resamp_opt] = opts[resamp_opt]
+        self.model.options["resampling"] = resamp
 
     def _struc_delete_btn(self, add_struc):
         def _del_cb():
