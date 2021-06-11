@@ -202,25 +202,35 @@ class UserPvModel(PartialVolumeStructureModel):
         try:
             ret = {}
             total_pv = None
+            grid = None
             for struc in self.default_strucs:
                 if struc.name in pvmaps:
-                    ret[struc.name] = self._ivm.data[pvmaps[struc.name]]
+                    if grid is None:
+                        # FIXME take grid from first data set - should there be a choice?
+                        grid = self._ivm.data[pvmaps[struc.name]].grid
+                    ret[struc.name] = self._ivm.data[pvmaps[struc.name]].resample(grid)
                     if total_pv is None:
-                        total_pv = np.zeros(ret[struc.name].grid.shape, dtype=np.float32)
+                        total_pv = np.zeros(grid.shape, dtype=np.float32)
                     total_pv += ret[struc.name].raw()
 
             # Additional structures
             if self.options["additional"] is not None:
                 for struc in self.options.get("additional", {}).values():
-                    data = self._ivm.data[pvmaps[struc["name"]]]
+                    data = self._ivm.data[struc["pvmap"]].resample(grid)
                     struc_type = struc.get("struc_type", "")
                     if struc_type == "embed":
                         # Embedding - we need to downweight existing structure PVs so they all sum to 1 at most
-                        reweighting = 1-data.raw()
+                        pv = data.raw()
+                        if "region" in struc:
+                            # For an ROI we need to isolate the specific region and give it a PV of 1
+                            pv[pv != struc["region"]] = 0
+                            pv[pv > 0] = 1
+                        pv = pv.astype(np.float32)
+                        reweighting = 1-pv
                         for name, qpdata in ret.items():
                             qpdata = NumpyData(qpdata.raw() * reweighting, grid=qpdata.grid, name=name)
                             ret[name] = qpdata
-                        ret[struc["name"]] = data
+                        ret[struc["name"]] = NumpyData(pv, grid=data.grid, name=struc["name"])
                     elif struc_type == "act":
                         # Activation mask - replace parent structure
                         parent_struc = struc.get("parent_struc", None)
@@ -228,7 +238,6 @@ class UserPvModel(PartialVolumeStructureModel):
                             raise QpException("Parent structure not defined for activation mask: %s" % struc["name"])
                         elif parent_struc not in ret:
                             raise QpException("Parent structure '%s' not found in structures list for activation mask: %s" % (parent_struc, struc["name"]))
-                        # FIXME check grids compatible and resample if not
                         parent_data = ret[parent_struc]
                         parent_data_masked = np.copy(parent_data.raw())
                         activation_mask = data.raw().astype(np.int)
@@ -238,7 +247,7 @@ class UserPvModel(PartialVolumeStructureModel):
                         activation_data[activation_mask > 0] = parent_data_masked[activation_mask > 0]
                         parent_data_masked[activation_mask > 0] = 0
                         ret[parent_struc] = NumpyData(parent_data_masked, grid=parent_data.grid, name=parent_data.name)
-                        ret[struc["name"]] = NumpyData(activation_data, grid=data.mask, name=struc["name"])
+                        ret[struc["name"]] = NumpyData(activation_data, grid=parent_data.grid, name=struc["name"])
                     elif struc_type == "add":
                         pass # Just use data directly
                         ret[struc["name"]] = data
@@ -264,8 +273,7 @@ class UserPvModel(PartialVolumeStructureModel):
                 ret[name] = post
 
             if sum_map_post is not None and np.all(sum_map_pre <= 1) and not np.all(sum_map_post <= 1):
-                # Resampling has messed up the PV sum a bit - rescale to fix this but only in affected
-                # voxels
+                # Resampling has messed up the PV sum a bit - rescale to fix this but only in affected voxels
                 self.debug("Max PV in resampled maps is %f: rescaling in %i voxels" % (np.max(sum_map_post), np.count_nonzero(sum_map_post > 1)))
                 for name in list(ret.keys()):
                     pv_map = ret[name].raw()

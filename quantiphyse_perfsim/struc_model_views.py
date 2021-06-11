@@ -45,9 +45,11 @@ class AddEmbeddingDialog(QtGui.QDialog):
         self._opts = OptionBox()
         pvmap = self._opts.add("PV map / mask", DataOption(ivm, data=True, rois=True), key="pvmap")
         pvmap.sig_changed.connect(self._pvmap_changed)
+        region = self._opts.add("ROI region", NumericOption(minval=1, default=1, intonly=True), key="region")
         name = self._opts.add("Name of embedded structure", TextOption(), key="name")
         name.textChanged.connect(self._name_changed)
-        self._opts.add("Structure type", ChoiceOption(["Embedding", "Activation mask", "Additional PVE"], return_values=["embed", "act", "add"]), key="type")
+        stype = self._opts.add("Structure type", ChoiceOption(["Embedding", "Activation mask", "Additional PVE"], return_values=["embed", "act", "add"]), key="type")
+        stype.sig_changed.connect(self._pvmap_changed)
         self._opts.add("Parent structure", ChoiceOption([s.display_name for s in existing_strucs], [s.name for s in existing_strucs]), key="parent")
         vbox.addWidget(self._opts)
 
@@ -61,6 +63,7 @@ class AddEmbeddingDialog(QtGui.QDialog):
         if self.name == "" and self.pvmap:
             qpdata = self.ivm.data[self.pvmap]
             self._opts.option("name").value = qpdata.name
+            self._opts.set_visible("region", qpdata.roi and self.struc_type == "embed")
 
     def _name_changed(self):
         accept = self.name != "" and self.name not in self.existing_names
@@ -69,6 +72,10 @@ class AddEmbeddingDialog(QtGui.QDialog):
     @property
     def pvmap(self):
         return self._opts.option("pvmap").value
+
+    @property
+    def region(self):
+        return self._opts.values().get("region", None)
 
     @property
     def name(self):
@@ -143,7 +150,7 @@ class UserPvModelView:
         resamp = {}
         for resamp_opt in ("type", "grid", "factor", "voxel-sizes"):
             if resamp_opt in opts:
-                resamp["resampling"][resamp_opt] = opts[resamp_opt]
+                resamp[resamp_opt] = opts[resamp_opt]
         self.model.options["resampling"] = resamp
 
     def _struc_delete_btn(self, add_struc):
@@ -167,6 +174,9 @@ class UserPvModelView:
             traceback.print_exc()
         if accept:
             self.model.options["additional"][dialog.name] = {"name" : dialog.name, "struc_type" : dialog.struc_type, "parent_struc" : dialog.parent_struc, "pvmap" : dialog.pvmap}
+            if dialog.region:
+                self.model.options["additional"][dialog.name]["region"] = dialog.region
+
             self._refresh_gui()
 
 class FastStructureModelView:
