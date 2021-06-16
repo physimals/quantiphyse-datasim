@@ -1,0 +1,159 @@
+Debug: False
+
+Processing:
+  - Load:
+      data:
+        T1_fast_pve_1.nii.gz: T1_fast_pve_1
+        T1_fast_pve_2.nii.gz: T1_fast_pve_2
+        T1_fast_pve_0.nii.gz: T1_fast_pve_0
+        VisMotROI_struc.nii.gz: VisMotROI_struc
+
+  - PerfSim: 
+      output: asl
+      output-param-maps: True
+      output-clean: asl_clean
+      struc-model: user
+      data-model: asl
+      struc-model-options: 
+        pvmaps: 
+          gm: T1_fast_pve_1
+          wm: T1_fast_pve_2
+          csf: T1_fast_pve_0
+        additional: 
+          VisMotROI: 
+            name: VisMotROI
+            struc_type: act
+            parent_struc: gm
+            pvmap: VisMotROI_struc
+            region: 1
+        resampling: 
+          type: res
+          voxel-sizes: [3.5, 3.5, 3.5]
+      data-model-options: 
+        tau: 1.8
+        casl: True
+        plds: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+        slicedt: 0
+        iaf: diff
+        repeats: 8
+        ibf: tis
+        alpha: 0.85
+        m0: 1000.0
+        tr: 4.0
+        te: 13.0
+        pct: 0.9
+      param-values: 
+        VisMotROI: 
+          t1: 1.3
+          t1b: 1.65
+          ftiss: 100.0
+          delttiss: 1.3
+        csf: 
+          t1: 4.3
+          t1b: 1.65
+          ftiss: 0.0
+          delttiss: 1.3
+        gm: 
+          t1: 1.3
+          t1b: 1.65
+          ftiss: 50.0
+          delttiss: 1.3
+        wm: 
+          t1: 1.1
+          t1b: 1.65
+          ftiss: 10.0
+          delttiss: 1.6
+
+  - AddNoise: 
+      snr: 10.0
+      data: asl
+      roi: asl_roi
+      output-name: asl
+
+  - PerfSim: 
+      output: m0
+      output-param-maps: False
+      struc-model: user
+      data-model: spin_echo
+      struc-model-options: 
+        pvmaps: 
+          gm: T1_fast_pve_1
+          wm: T1_fast_pve_2
+          csf: T1_fast_pve_0
+        additional: 
+          VisMotROI: 
+            name: VisMotROI
+            struc_type: act
+            parent_struc: gm
+            pvmap: VisMotROI_struc
+            region: 1
+        resampling: 
+          type: res
+          voxel-sizes: [3.5, 3.5, 3.5]
+      data-model-options: 
+        tr: 4.8
+        te: 0.0
+        m0: 1000.0
+      param-values: 
+        VisMotROI: 
+          t1: 1.3
+          t2: 100.0
+          pc: 0.98
+        csf: 
+          t1: 4.3
+          t2: 750.0
+          pc: 1.15
+        gm: 
+          t1: 1.3
+          t2: 100.0
+          pc: 0.98
+        wm: 
+          t1: 1.1
+          t2: 50.0
+          pc: 0.82
+
+  - AddNoise: 
+      snr: 10.0
+      data: m0
+      roi: m0_roi
+      output-name: m0
+
+  - Oxasl: 
+      data: asl
+      iaf: diff
+      ibf: tis
+      taus: [1.8]
+      casl: True
+      plds: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+      mc: False
+      use_enable: False
+      calib_method: voxelwise
+      calib: m0
+      tr: 4.8
+      spatial: True
+      infertau: False
+      inferbat: True
+      infert1: False
+      inferart: False
+      pvcorr: False
+      wp: False
+      output_native: True
+      output_struc: False
+      output_mni: False
+      output_var: False
+      save_mask: True
+      save_calib: False
+      save_corrected: False
+      save_reg: False
+      save_struc: False
+      save_basil: False
+
+  - SaveAllExcept:
+      MNI152_T1_2mm_brain_pve_2:
+      MNI152_T1_2mm_brain_pve_1:
+      MNI152_T1_2mm_brain_pve_0:
+
+Cases:
+  Case1:
+    InputFolder: /Users/ctsu0221/data/asl/flora_sim_data/Martin_simulation_example/WH_515_struct.anat
+    OutputFolder: /Users/ctsu0221/data/asl/flora_sim_data/Martin_simulation_example/qp_out
