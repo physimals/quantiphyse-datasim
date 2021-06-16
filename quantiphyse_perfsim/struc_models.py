@@ -203,54 +203,34 @@ class UserPvModel(PartialVolumeStructureModel):
             ret = {}
             total_pv = None
             grid = None
+            # First get the PV maps from the default structures. We also calculate the
+            # sum of PVs in the maps as it may be needed when we insert embedded user-defined
+            # structures. The first default structure map defines the grid FIXME should there
+            # be an independent choice of grid?
             for struc in self.default_strucs:
                 if struc.name in pvmaps:
                     if grid is None:
-                        # FIXME take grid from first data set - should there be a choice?
                         grid = self._ivm.data[pvmaps[struc.name]].grid
                     ret[struc.name] = self._ivm.data[pvmaps[struc.name]].resample(grid)
                     if total_pv is None:
                         total_pv = np.zeros(grid.shape, dtype=np.float32)
                     total_pv += ret[struc.name].raw()
 
-            # Additional structures
+            # Now deal with any user-defined additional structures. We handle these differently
+            # depending on whether they are embeddings, activation masks or additional PV
             if self.options["additional"] is not None:
                 for struc in self.options.get("additional", {}).values():
-                    data = self._ivm.data[struc["pvmap"]].resample(grid)
+                    if grid is None:
+                        grid = self._ivm.data[struc["pvmap"]].grid
+                    qpdata = self._ivm.data[struc["pvmap"]].resample(grid)
                     struc_type = struc.get("struc_type", "")
                     if struc_type == "embed":
-                        # Embedding - we need to downweight existing structure PVs so they all sum to 1 at most
-                        pv = data.raw()
-                        if "region" in struc:
-                            # For an ROI we need to isolate the specific region and give it a PV of 1
-                            pv[pv != struc["region"]] = 0
-                            pv[pv > 0] = 1
-                        pv = pv.astype(np.float32)
-                        reweighting = 1-pv
-                        for name, qpdata in ret.items():
-                            qpdata = NumpyData(qpdata.raw() * reweighting, grid=qpdata.grid, name=name)
-                            ret[name] = qpdata
-                        ret[struc["name"]] = NumpyData(pv, grid=data.grid, name=struc["name"])
+                        self._add_embedding(struc, qpdata, ret)
                     elif struc_type == "act":
-                        # Activation mask - replace parent structure
-                        parent_struc = struc.get("parent_struc", None)
-                        if parent_struc is None:
-                            raise QpException("Parent structure not defined for activation mask: %s" % struc["name"])
-                        elif parent_struc not in ret:
-                            raise QpException("Parent structure '%s' not found in structures list for activation mask: %s" % (parent_struc, struc["name"]))
-                        parent_data = ret[parent_struc]
-                        parent_data_masked = np.copy(parent_data.raw())
-                        activation_mask = data.raw().astype(np.int)
-
-                        # Activation structure takes over parent structure in the 
-                        activation_data = np.zeros(parent_data_masked.shape, dtype=np.float32)
-                        activation_data[activation_mask > 0] = parent_data_masked[activation_mask > 0]
-                        parent_data_masked[activation_mask > 0] = 0
-                        ret[parent_struc] = NumpyData(parent_data_masked, grid=parent_data.grid, name=parent_data.name)
-                        ret[struc["name"]] = NumpyData(activation_data, grid=parent_data.grid, name=struc["name"])
+                        self._add_activation_mask(struc, qpdata, ret)
                     elif struc_type == "add":
-                        pass # Just use data directly
-                        ret[struc["name"]] = data
+                        # Just use data directly
+                        ret[struc["name"]] = qpdata
                     else:
                         raise QpException("Unknown additional structure type: %s" % struc_type)
 
@@ -280,13 +260,74 @@ class UserPvModel(PartialVolumeStructureModel):
                     pv_map[sum_map_post > 1] /= sum_map_post[sum_map_post > 1]
 
             return ret
-        except KeyError as exc:
+        except KeyError:
             raise
-            #raise QpException("No structure map defined: %s" % str(exc.args[0]))
 
-    def _reweight(self, strucs, to_pv):
-        # FIXME
-        pass
+    def _add_embedding(self, struc, qpdata, strucs):
+        """
+        Add an embedded structure
+
+        For an embedding, the PV map is inserted into the output unchanged and existing
+        structures PVs are downweighted by the PV of the embedding (e.g. if the embedding
+        has a PV of 0.5 is a voxel then existing structures in that voxel are downweighted
+        by a factor of 2). This will ensure that total PV does not exceed 1
+
+        :param struc: Structure dictionary
+        :param qpdata: Embedding PV map defined on same grid as existing data
+        :param strucs: Dictionary of structure name to PV map for existing structures.
+                       Will be updated to include embedded structure.
+        """
+        pv = qpdata.raw()
+        if "region" in struc:
+            # For a discrete ROI, we need to isolate the specific region and give it a PV of 1
+            pv[pv != struc["region"]] = 0
+            pv[pv > 0] = 1
+        pv = pv.astype(np.float32)
+        reweighting = 1-pv
+        for name, existing_map in strucs.items():
+            new_map = NumpyData(existing_map.raw() * reweighting, grid=qpdata.grid, name=name)
+            strucs[name] = new_map
+        strucs[struc["name"]] = NumpyData(pv, grid=qpdata.grid, name=struc["name"])
+
+    def _add_activation_mask(self, struc, qpdata, strucs):
+        """
+        Add an activation mask
+
+        This is a binary mask which splits a parent structure (e.g. GM) into two separate
+        structures, inside and outside the mask, which can have different parameter properties
+
+        :param struc: Structure dictionary. Must define the parent structure.
+        :param qpdata: Activation mask map defined on same grid as existing data
+        :param strucs: Dictionary of structure name to PV map for existing structures.
+                       Will be updated to include split parent structure.
+        """
+        # Activation mask - replace parent structure
+        parent_struc = struc.get("parent_struc", None)
+        if parent_struc is None:
+            raise QpException("Parent structure not defined for activation mask: %s" % struc["name"])
+        elif parent_struc not in strucs:
+            raise QpException("Parent structure '%s' not found in structures list for activation mask: %s" % (parent_struc, struc["name"]))
+        activation_mask = np.copy(qpdata.raw())
+        if "region" in struc:
+            # If a specific region is given, isolate it
+            activation_mask[activation_mask != struc["region"]] = 0
+
+        if qpdata.roi:
+            # If mask is an ROI, make it take values 0 and 1
+            activation_mask[activation_mask <= 0] = 1
+            activation_mask[activation_mask > 0] = 1
+
+        # Activation structure takes over parent structure within the mask.
+        # We do this by multiplication so the activation mask can in principle
+        # be probabilistic
+        activation_mask = activation_mask.astype(np.float32)
+        parent_qpdata = strucs[parent_struc]
+        parent_data = np.copy(parent_qpdata.raw())
+        activation_data = np.copy(parent_qpdata.raw())
+        activation_data *= activation_mask
+        parent_data *= (1-activation_mask)
+        strucs[parent_struc] = NumpyData(parent_data, grid=parent_qpdata.grid, name=parent_qpdata.name)
+        strucs[struc["name"]] = NumpyData(activation_data, grid=parent_qpdata.grid, name=struc["name"])
 
 class FastStructureModel(PartialVolumeStructureModel):
     """
