@@ -106,7 +106,7 @@ class UserPvModelView:
         self._refresh_gui()
 
     def _refresh_gui(self):
-        options = self.model.options
+        options = dict(self.model.options)
         self.gui.clear()
         for struc in self.model.default_strucs:
             data_opt = self.gui.add("%s map" % struc.name.upper(), DataOption(self.model._ivm, explicit=True), checked=True, enabled=struc.name in options["pvmaps"], key=struc.name)
@@ -117,17 +117,18 @@ class UserPvModelView:
             display_type = {"add" : "map", "embed" : "embedding", "act" : "mask"}.get(struc["struc_type"], "map")
             data_opt = self.gui.add("%s %s" % (struc["name"], display_type), DataOption(self.model._ivm, explicit=True, rois=True), del_btn, key=struc["name"])
             data_opt.value = struc.get("pvmap", None)
-        self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
 
         res_opts = options.get("resampling", {})
         self.gui.add("Resampling", ChoiceOption(["Downsample", "From another data set", "Specified resolution"], ["down", "data", "res"], 
-                     default=res_opts.get("type", "data")), checked=True, enabled="type" in res_opts, key="type")
+                     default=res_opts.get("type", "res")), checked=True, enabled="type" in res_opts, key="type")
         self.gui.add("Output space from", DataOption(self.ivm), key="grid")
         self.gui.add("Output resample factor", NumericOption(intonly=True, minval=1, maxval=10, default=2), key="factor")
         self.gui.add("Voxel sizes (mm)", NumberListOption(), key="voxel-sizes")
         for opt in ("grid", "factor", "voxel-sizes"):
             if opt in res_opts:
                 self.gui.option(opt).value = res_opts[opt]
+
+        self.gui.add(None, RunButton("Add user-defined structure", callback=self._add_embedding), key="add_embedding")
         self._update_resamp_visibility()
 
     def _update_resamp_visibility(self):
