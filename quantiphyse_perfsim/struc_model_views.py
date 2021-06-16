@@ -123,7 +123,7 @@ class UserPvModelView:
                      default=res_opts.get("type", "res")), checked=True, enabled="type" in res_opts, key="type")
         self.gui.add("Output space from", DataOption(self.ivm), key="grid")
         self.gui.add("Output resample factor", NumericOption(intonly=True, minval=1, maxval=10, default=2), key="factor")
-        self.gui.add("Voxel sizes (mm)", NumberListOption(), key="voxel-sizes")
+        self.gui.add("Voxel sizes (mm)", NumberListOption(load_btn=False), key="voxel-sizes")
         for opt in ("grid", "factor", "voxel-sizes"):
             if opt in res_opts:
                 self.gui.option(opt).value = res_opts[opt]
