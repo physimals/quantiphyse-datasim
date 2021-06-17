@@ -11,7 +11,7 @@ Processing:
 
   - PerfSim: 
       output: asl
-      output-param-maps: False
+      output-param-maps: True
       struc-model: user
       data-model: asl
       struc-model-options: 
@@ -84,7 +84,7 @@ Processing:
 
   - PerfSim: 
       output: m0
-      output-param-maps: True
+      output-param-maps: False
       struc-model: user
       data-model: spin_echo
       struc-model-options: 
@@ -143,7 +143,7 @@ Processing:
 
   - Oxasl: 
       data: asl
-      #mask: asl_roi
+      roi: asl_roi
       iaf: diff
       ibf: tis
       taus: [1.8]
@@ -173,6 +173,7 @@ Processing:
       save_basil: False
 
   - SaveAllExcept:
+      m0_roi:
       T1w_brain_pve_0:
       T1w_brain_pve_1:
       T1w_brain_pve_2:

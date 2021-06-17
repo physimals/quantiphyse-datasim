@@ -120,6 +120,7 @@ Processing:
 
   - Oxasl: 
       data: asl
+      roi: asl_roi
       iaf: diff
       ibf: tis
       taus: [1.8]
@@ -149,6 +150,7 @@ Processing:
       save_basil: False
 
   - SaveAllExcept:
+      m0_roi:
       MNI152_T1_2mm_brain_pve_2:
       MNI152_T1_2mm_brain_pve_1:
       MNI152_T1_2mm_brain_pve_0:
