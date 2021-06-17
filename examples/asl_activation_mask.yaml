@@ -8,7 +8,7 @@ Processing:
         T1_fast_pve_0.nii.gz: T1_fast_pve_0
         VisMotROI_struc.nii.gz: VisMotROI_struc
 
-  - PerfSim: 
+  - DataSim: 
       output: asl
       output-param-maps: True
       output-clean: asl_clean
@@ -70,7 +70,7 @@ Processing:
       roi: asl_roi
       output-name: asl
 
-  - PerfSim: 
+  - DataSim: 
       output: m0
       output-param-maps: False
       struc-model: user

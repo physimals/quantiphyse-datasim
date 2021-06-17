@@ -1,5 +1,5 @@
 """
-Perfusion simulation Quantiphyse plugin
+Data simulation Quantiphyse plugin
 
 Structural models, i.e. classes which return lists of different
 structures and the corresponding partial volume maps
@@ -22,7 +22,7 @@ from .model import Model, Parameter
 
 def get_struc_models():
     ret = {}
-    for cls in get_plugins("perfsim-struc-models"):
+    for cls in get_plugins("datasim-struc-models"):
         ret[cls.NAME] = cls
     return ret
 

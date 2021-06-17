@@ -1,5 +1,5 @@
 """
-Perfusion simulation Quantiphyse plugin
+Data simulation Quantiphyse plugin
 
 Data models, i.e. classes which generated simulated data for different
 types of imaging
@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 
 def get_data_models():
     ret = {}
-    for cls in get_plugins("perfsim-data-models"):
+    for cls in get_plugins("datasim-data-models"):
         ret[cls.NAME] = cls
     return ret
 

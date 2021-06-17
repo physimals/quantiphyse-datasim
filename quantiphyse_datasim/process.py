@@ -1,7 +1,7 @@
 """
-Perfusion simulation Quantiphyse plugin
+Data simulation Quantiphyse plugin
 
-Perfusion simulation process
+Data simulation process
 
 Author: Martin Craig <martin.craig@eng.ox.ac.uk>
 Copyright (c) 2016-2017 University of Oxford, Martin Craig
@@ -16,12 +16,12 @@ from quantiphyse.utils import QpException
 from .data_models import get_data_models
 from .struc_models import get_struc_models
 
-class PerfSimProcess(Process):
+class DataSimProcess(Process):
     """
     Calculate CBF from R2P / DBV output
     """
     
-    PROCESS_NAME = "PerfSim"
+    PROCESS_NAME = "DataSim"
     
     def __init__(self, ivm, **kwargs):
         Process.__init__(self, ivm, **kwargs)

@@ -8,7 +8,7 @@ Processing:
         /Users/ctsu0221/data/misc/MNI152_T1_2mm_brain_pve_1.nii: MNI152_T1_2mm_brain_pve_1
         /Users/ctsu0221/data/misc/MNI152_T1_2mm_brain_pve_0.nii: MNI152_T1_2mm_brain_pve_0
 
-  - PerfSim: 
+  - DataSim: 
       output: asl
       output-param-maps: True
       output-clean: asl_clean
@@ -70,7 +70,7 @@ Processing:
   - Delete: 
       asl_roi: 
 
-  - PerfSim: 
+  - DataSim: 
       output: m0
       output-param-maps: True
       output-clean: m0_clean

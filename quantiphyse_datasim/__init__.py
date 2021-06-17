@@ -1,11 +1,11 @@
 """
-Quantiphyse plugin for perfusion simulation
+Quantiphyse plugin for data simulation
 
 Author: Martin Craig <martin.craig@eng.ox.ac.uk>
 Copyright (c) 2016-2017 University of Oxford, Martin Craig
 """
-from .widget import PerfSimWidget
-from .process import PerfSimProcess
+from .widget import DataSimWidget
+from .process import DataSimProcess
 from .data_models import *
 from .data_model_views import *
 from .struc_models import *
@@ -17,18 +17,18 @@ def get_view_class(model_class):
 
 QP_MANIFEST = {
     "widgets" : [
-        PerfSimWidget
+        DataSimWidget
     ],
     "processes" : [
-        PerfSimProcess
+        DataSimProcess
     ],
-    "perfsim-data-models" : [
+    "datasim-data-models" : [
         SpinEchoDataModel,
         AslDataModel,
         DscDataModel,
         DceDataModel,
     ],
-    "perfsim-struc-models" : [
+    "datasim-struc-models" : [
         UserPvModel,
         CheckerboardModel,
         #FslStdStructureModel,

@@ -1,5 +1,5 @@
 """
-Perfusion simulation Quantiphyse plugin
+Data simulation Quantiphyse plugin
 
 Generic classes for data and structural models
 

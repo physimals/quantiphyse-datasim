@@ -1,5 +1,5 @@
 """
-Perfusion simulation Quantiphyse plugin
+Datausion simulation Quantiphyse plugin
 
 Data models, i.e. classes which generated simulated data for different
 types of imaging

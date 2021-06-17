@@ -1,5 +1,5 @@
 """
-Setup script for quantiphyse-perfsim
+Setup script for quantiphyse-datasim
 """
 import os
 import subprocess
@@ -10,7 +10,7 @@ import glob
 from setuptools import setup
 from setuptools import find_packages
 
-MODULE = 'quantiphyse_perfsim'
+MODULE = 'quantiphyse_datasim'
 
 def get_filetext(rootdir, filename):
     """ Get the text of a local file """
@@ -83,9 +83,9 @@ def get_package_data(rootdir):
 module_dir = os.path.abspath(os.path.dirname(__file__))
 
 kwargs = {
-    'name' : 'quantiphyse-perfsim',
+    'name' : 'quantiphyse-datasim',
     'version' : get_version(module_dir),
-    'description' : 'Quantiphyse plugin for simulating perfusion data',
+    'description' : 'Quantiphyse plugin for simulating data',
     'long_description' : get_filetext(module_dir, 'README.md'),
     'long_description_content_type' : 'text/markdown',
     'url' : 'https://quantiphyse.readthedocs.io/',

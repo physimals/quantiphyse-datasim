@@ -1,5 +1,5 @@
 """
-Perfusion simulation Quantiphyse plugin
+Data simulation Quantiphyse plugin
 
 GUIs for structural models, i.e. QtWidget instances which control the options
 of a structural model

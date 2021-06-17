@@ -248,12 +248,12 @@ class OutputOptions(OptionsWidget):
         main_vbox.addWidget(self.options)
         main_vbox.addStretch(1)
 
-class PerfSimWidget(QpWidget):
+class DataSimWidget(QpWidget):
     """
     Data simulation widget
     """
     def __init__(self, **kwargs):
-        QpWidget.__init__(self, name="Data Simulator", icon="perfsim", group="Simulation",
+        QpWidget.__init__(self, name="Data Simulator", icon="datasim", group="Simulation",
                           desc="Simulates data for various imaging sequences, from known parameter inputs", **kwargs)
         self._param_values = {}
 
@@ -261,7 +261,7 @@ class PerfSimWidget(QpWidget):
         main_vbox = QtGui.QVBoxLayout()
         self.setLayout(main_vbox)
 
-        title = TitleWidget(self, help="generic/perfsim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
+        title = TitleWidget(self, help="generic/datasim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
         main_vbox.addWidget(title)
 
         self.tabs = QtGui.QTabWidget()
@@ -297,7 +297,7 @@ class PerfSimWidget(QpWidget):
         opts["struc-model-options"] = self.struc_model.model.options
         opts["data-model-options"] = self.data_model.model.options
         opts["param-values"] = self.params.options
-        processes.append({"PerfSim" : opts})
+        processes.append({"DataSim" : opts})
 
         motion_opts = self.motion.options.values()
         if motion_opts.pop("motion"):

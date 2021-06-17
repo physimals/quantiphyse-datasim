@@ -9,7 +9,7 @@ Processing:
       rois:
         tumroi.nii: tumroi
 
-  - PerfSim: 
+  - DataSim: 
       output: asl
       output-param-maps: True
       struc-model: user
@@ -82,7 +82,7 @@ Processing:
       roi: asl_roi
       output-name: asl
 
-  - PerfSim: 
+  - DataSim: 
       output: m0
       output-param-maps: False
       struc-model: user

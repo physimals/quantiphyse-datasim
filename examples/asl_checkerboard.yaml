@@ -2,7 +2,7 @@ OutputFolder: asl_checkerboard_out
 Debug: False
 
 Processing:
-  - PerfSim: 
+  - DataSim: 
       output: sim_data
       output-param-maps: True
       struc-model: checkerboard
