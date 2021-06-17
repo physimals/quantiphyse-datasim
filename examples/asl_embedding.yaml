@@ -1,0 +1,185 @@
+Debug: False
+
+Processing:
+  - Load:
+      data:
+        T1w_brain_pve_0.nii.gz: T1w_brain_pve_0
+        T1w_brain_pve_1.nii.gz: T1w_brain_pve_1
+        T1w_brain_pve_2.nii.gz: T1w_brain_pve_2
+      rois:
+        tumroi.nii: tumroi
+
+  - PerfSim: 
+      output: asl
+      output-param-maps: False
+      struc-model: user
+      data-model: asl
+      struc-model-options: 
+        pvmaps: 
+          gm: T1w_brain_pve_1
+          wm: T1w_brain_pve_2
+          csf: T1w_brain_pve_0
+        additional: 
+          core: 
+            name: core
+            struc_type: embed
+            parent_struc: gm
+            pvmap: tumroi
+            region: 2
+          rim: 
+            name: rim
+            struc_type: embed
+            parent_struc: gm
+            pvmap: tumroi
+            region: 1
+            sigma: 1.5
+        resampling: 
+          type: res
+          voxel-sizes: [3.5, 3.5, 3.5]
+      data-model-options: 
+        tau: 1.8
+        casl: True
+        plds: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+        slicedt: 0
+        iaf: diff
+        repeats: 1
+        ibf: tis
+        alpha: 0.85
+        m0: 1000.0
+        tr: 4.0
+        te: 13.0
+        pct: 0.9
+      param-values: 
+        core: 
+          t1: 1.3
+          t1b: 1.65
+          ftiss: 0.0
+          delttiss: 1.3
+        csf: 
+          t1: 4.3
+          t1b: 1.65
+          ftiss: 0.0
+          delttiss: 1.3
+        gm: 
+          t1: 1.3
+          t1b: 1.65
+          ftiss: 50.0
+          delttiss: 1.3
+        rim: 
+          t1: 1.3
+          t1b: 1.65
+          ftiss: 100.0
+          delttiss: 1.3
+        wm: 
+          t1: 1.1
+          t1b: 1.65
+          ftiss: 10.0
+          delttiss: 1.6
+
+  - AddNoise: 
+      snr: 10.0
+      data: asl
+      roi: asl_roi
+      output-name: asl
+
+  - PerfSim: 
+      output: m0
+      output-param-maps: True
+      struc-model: user
+      data-model: spin_echo
+      struc-model-options: 
+        pvmaps: 
+          gm: T1w_brain_pve_1
+          wm: T1w_brain_pve_2
+          csf: T1w_brain_pve_0
+        additional: 
+          core: 
+            name: core
+            struc_type: embed
+            parent_struc: gm
+            pvmap: tumroi
+            region: 2
+          rim: 
+            name: rim
+            struc_type: embed
+            parent_struc: gm
+            pvmap: tumroi
+            region: 1
+            sigma: 1.5
+        resampling: 
+          type: res
+          voxel-sizes: [3.5, 3.5, 3.5]
+      data-model-options: 
+        tr: 4.8
+        te: 0.0
+        m0: 1000.0
+      param-values: 
+        core: 
+          t1: 1.3
+          t2: 100.0
+          pc: 0.98
+        csf: 
+          t1: 4.3
+          t2: 750.0
+          pc: 1.15
+        gm: 
+          t1: 1.3
+          t2: 100.0
+          pc: 0.98
+        rim: 
+          t1: 1.3
+          t2: 100.0
+          pc: 0.98
+        wm: 
+          t1: 1.1
+          t2: 50.0
+          pc: 0.82
+
+  - AddNoise: 
+      snr: 10.0
+      data: m0
+      roi: m0_roi
+      output-name: m0
+
+  - Oxasl: 
+      data: asl
+      #mask: asl_roi
+      iaf: diff
+      ibf: tis
+      taus: [1.8]
+      casl: True
+      plds: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+      mc: False
+      use_enable: False
+      calib_method: voxelwise
+      calib: m0
+      tr: 4.8
+      spatial: True
+      infertau: False
+      inferbat: True
+      infert1: False
+      inferart: False
+      pvcorr: False
+      wp: False
+      output_native: True
+      output_struc: False
+      output_mni: False
+      output_var: False
+      save_mask: True
+      save_calib: False
+      save_corrected: False
+      save_reg: False
+      save_struc: False
+      save_basil: False
+
+  - SaveAllExcept:
+      T1w_brain_pve_0:
+      T1w_brain_pve_1:
+      T1w_brain_pve_2:
+      tumroi:
+
+Cases:
+  Case1:
+    InputFolder: /Users/ctsu0221/data/asl/paula_sim_data/Simulator_Data
+    OutputFolder: /Users/ctsu0221/data/asl/paula_sim_data/qp_out
+
