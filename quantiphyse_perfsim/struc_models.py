@@ -235,29 +235,23 @@ class UserPvModel(PartialVolumeStructureModel):
                         raise QpException("Unknown additional structure type: %s" % struc_type)
 
             # Resample PV maps according to specification
-            # Note that resampling can lead to situations where the sum of the partial volumes
+            # Note that resampling/embedding/smoothing etc can lead to situations where the sum of the partial volumes
             # in the resampled maps is >1 in some voxels, even where this was not true in the
             # original maps. We need to detect this and rescale the affected voxels
-            sum_map_pre = None
-            sum_map_post = None
+            sum_maps = None
             for name in list(ret.keys()):
-                pre = ret[name]
-                if sum_map_pre is None:
-                    sum_map_pre = np.zeros(pre.raw().shape, dtype=np.float32)
-                sum_map_pre += pre.raw()
+                resampled = self.resamp(ret[name])
+                if sum_maps is None:
+                    sum_maps = np.zeros(resampled.raw().shape, dtype=np.float32)
+                sum_maps += resampled.raw()
+                ret[name] = resampled
 
-                post = self.resamp(pre)
-                if sum_map_post is None:
-                    sum_map_post = np.zeros(post.raw().shape, dtype=np.float32)
-                sum_map_post += post.raw()
-                ret[name] = post
-
-            if sum_map_post is not None and np.all(sum_map_pre <= 1) and not np.all(sum_map_post <= 1):
+            if sum_maps is not None and not np.all(sum_maps <= 1):
                 # Resampling has messed up the PV sum a bit - rescale to fix this but only in affected voxels
-                self.debug("Max PV in resampled maps is %f: rescaling in %i voxels" % (np.max(sum_map_post), np.count_nonzero(sum_map_post > 1)))
+                self.debug("Max PV in resampled maps is %f: rescaling in %i voxels" % (np.max(sum_maps), np.count_nonzero(sum_maps > 1)))
                 for name in list(ret.keys()):
                     pv_map = ret[name].raw()
-                    pv_map[sum_map_post > 1] /= sum_map_post[sum_map_post > 1]
+                    pv_map[sum_maps > 1] /= sum_maps[sum_maps > 1]
 
             return ret
         except KeyError:
@@ -279,15 +273,54 @@ class UserPvModel(PartialVolumeStructureModel):
         """
         pv = qpdata.raw()
         if "region" in struc:
-            # For a discrete ROI, we need to isolate the specific region and give it a PV of 1
+            # If we are using only a single region of an ROI, zero out all other regions
             pv[pv != struc["region"]] = 0
+        if qpdata.roi:
+            # For any ROI map, voxels inside the ROI should have a PV of 1
             pv[pv > 0] = 1
         pv = pv.astype(np.float32)
+        if "sigma" in struc:
+            # Perform Gaussian smoothing
+            pv = self._smooth_pv(NumpyData(pv, grid=qpdata.grid, name=struc["name"]), struc["sigma"])
         reweighting = 1-pv
         for name, existing_map in strucs.items():
             new_map = NumpyData(existing_map.raw() * reweighting, grid=qpdata.grid, name=name)
             strucs[name] = new_map
         strucs[struc["name"]] = NumpyData(pv, grid=qpdata.grid, name=struc["name"])
+
+    def _smooth_pv(self, qpdata, sigma):
+        """
+        Do Gaussian smoothing on a partial volume map
+
+        Typically when the map is a discrete ROI and we want to smoothly blend it into
+        the other tissue PV maps
+
+        :param qpdata: PV map
+        :param sigma: Gaussian kernel std.dev in mm
+        :return: Smoothed PV map as Numpy array
+        """
+        smooth_processes = get_plugins("processes", "SmoothingProcess")
+        if len(smooth_processes) != 1:
+            raise QpException("Can't identify smoothing process")
+
+        ivm = ImageVolumeManagement()
+        ivm.add(qpdata)
+        process = smooth_processes[0](ivm)
+        smooth_options = {
+            "data" : qpdata.name,
+            "sigma" : sigma,
+            "output-name" : "output_smooth",
+        }
+        process.execute(smooth_options)
+        while process.status == Process.RUNNING:
+            time.sleep(1)
+
+        if process.status == Process.FAILED:
+            raise process.exception
+
+        # FIXME hack
+        process._complete()
+        return ivm.data["output_smooth"].raw()
 
     def _add_activation_mask(self, struc, qpdata, strucs):
         """

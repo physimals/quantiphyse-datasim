@@ -45,29 +45,44 @@ class AddEmbeddingDialog(QtGui.QDialog):
         self._opts = OptionBox()
         pvmap = self._opts.add("PV map / mask", DataOption(ivm, data=True, rois=True), key="pvmap")
         pvmap.sig_changed.connect(self._pvmap_changed)
-        region = self._opts.add("ROI region", NumericOption(minval=1, default=1, intonly=True), key="region")
+        self._opts.add("ROI region", ChoiceOption([]), key="region")
         name = self._opts.add("Name of embedded structure", TextOption(), key="name")
         name.textChanged.connect(self._name_changed)
-        stype = self._opts.add("Structure type", ChoiceOption(["Embedding", "Activation mask", "Additional PVE"], return_values=["embed", "act", "add"]), key="type")
-        stype.sig_changed.connect(self._pvmap_changed)
+        self._opts.add("Structure type", ChoiceOption(["Embedding", "Activation mask", "Additional PVE"], return_values=["embed", "act", "add"]), key="type")
         self._opts.add("Parent structure", ChoiceOption([s.display_name for s in existing_strucs], [s.name for s in existing_strucs]), key="parent")
+        self._opts.add("Edge smoothing sigma (mm)", NumericOption(minval=0, maxval=10, default=1, decimals=2), checked=True, enabled=False, key="sigma")
         vbox.addWidget(self._opts)
+
+        self._warning = QtWidgets.QLabel(parent=self)
+        self._warning.setStyleSheet("color: red;")
+        vbox.addWidget(self._warning)
 
         self.button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(False)
         vbox.addWidget(self.button_box)
+        self._pvmap_changed()
 
     def _pvmap_changed(self):
-        if self.name == "" and self.pvmap:
+        if self.pvmap:
             qpdata = self.ivm.data[self.pvmap]
-            self._opts.option("name").value = qpdata.name
-            self._opts.set_visible("region", qpdata.roi and self.struc_type == "embed")
+            if not self.name:
+                self._opts.option("name").value = qpdata.name
+            if qpdata.roi:
+                regions = list(qpdata.regions.keys())
+                region_names = list(qpdata.regions.values())
+                self._opts.option("region").setChoices(region_names, regions)
+            self._opts.set_visible("region", qpdata.roi and len(qpdata.regions) > 1)
+            self._opts.set_visible("sigma", qpdata.roi)
 
     def _name_changed(self):
         accept = self.name != "" and self.name not in self.existing_names
         self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(accept)
+        if self.name and not accept:
+            self._warning.setText("Name already exists")
+        else:
+            self._warning.setText("")
 
     @property
     def pvmap(self):
@@ -76,6 +91,10 @@ class AddEmbeddingDialog(QtGui.QDialog):
     @property
     def region(self):
         return self._opts.values().get("region", None)
+
+    @property
+    def sigma(self):
+        return self._opts.values().get("sigma", None)
 
     @property
     def name(self):
@@ -174,9 +193,16 @@ class UserPvModelView:
             import traceback
             traceback.print_exc()
         if accept:
-            self.model.options["additional"][dialog.name] = {"name" : dialog.name, "struc_type" : dialog.struc_type, "parent_struc" : dialog.parent_struc, "pvmap" : dialog.pvmap}
+            self.model.options["additional"][dialog.name] = {
+                "name" : dialog.name,
+                "struc_type" : dialog.struc_type,
+                "parent_struc" : dialog.parent_struc,
+                "pvmap" : dialog.pvmap,
+            }
             if dialog.region:
                 self.model.options["additional"][dialog.name]["region"] = dialog.region
+            if dialog.sigma:
+                self.model.options["additional"][dialog.name]["sigma"] = dialog.sigma
 
             self._refresh_gui()
 
