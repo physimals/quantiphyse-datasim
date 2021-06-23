@@ -180,7 +180,7 @@ Processing:
       tumroi:
 
 Cases:
-  Case1:
+  Embedding:
     InputFolder: /Users/ctsu0221/data/asl/paula_sim_data/Simulator_Data
     OutputFolder: /Users/ctsu0221/data/asl/paula_sim_data/qp_out
 

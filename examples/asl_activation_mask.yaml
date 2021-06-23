@@ -156,6 +156,6 @@ Processing:
       MNI152_T1_2mm_brain_pve_0:
 
 Cases:
-  Case1:
+  ActivationMask:
     InputFolder: /Users/ctsu0221/data/asl/flora_sim_data/Martin_simulation_example/WH_515_struct.anat
     OutputFolder: /Users/ctsu0221/data/asl/flora_sim_data/Martin_simulation_example/qp_out
