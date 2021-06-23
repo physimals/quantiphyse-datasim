@@ -67,11 +67,10 @@ class AddEmbeddingDialog(QtGui.QDialog):
     def _pvmap_changed(self):
         if self.pvmap:
             qpdata = self.ivm.data[self.pvmap]
-            if not self.name:
-                self._opts.option("name").value = qpdata.name
+            self._opts.option("name").value = qpdata.name
             if qpdata.roi:
-                regions = list(qpdata.regions.keys())
-                region_names = list(qpdata.regions.values())
+                regions = [-1] + list(qpdata.regions.keys())
+                region_names = ["All regions"] + list(qpdata.regions.values())
                 self._opts.option("region").setChoices(region_names, regions)
             self._opts.set_visible("region", qpdata.roi and len(qpdata.regions) > 1)
             self._opts.set_visible("sigma", qpdata.roi)
@@ -107,6 +106,37 @@ class AddEmbeddingDialog(QtGui.QDialog):
     @property
     def parent_struc(self):
         return self._opts.option("parent").value
+
+    @property
+    def strucs(self):
+        strucs = {}
+        if self.region == -1:
+            # Multiple regions - need to generate multiple structures for each
+            qpdata = self.ivm.data[self.pvmap]
+            for region_id, region_name in qpdata.regions.items():
+                name = "%s %s" % (self.name, region_name)
+                strucs[name] = {
+                    "name" : name,
+                    "struc_type" : self.struc_type,
+                    "parent_struc" : self.parent_struc,
+                    "pvmap" : self.pvmap,
+                    "region" : region_id
+                }
+                if self.sigma:
+                    strucs[name]["sigma"] = self.sigma
+        else:
+            # Not an ROI, or just a single region of the ROI
+            strucs[self.name] = {
+                "name" : self.name,
+                "struc_type" : self.struc_type,
+                "parent_struc" : self.parent_struc,
+                "pvmap" : self.pvmap,
+            }
+            if self.region:
+                strucs[self.name]["region"] = self.region
+            if self.sigma:
+                strucs[self.name]["sigma"] = self.sigma
+        return strucs
 
 class UserPvModelView:
     """
@@ -193,17 +223,7 @@ class UserPvModelView:
             import traceback
             traceback.print_exc()
         if accept:
-            self.model.options["additional"][dialog.name] = {
-                "name" : dialog.name,
-                "struc_type" : dialog.struc_type,
-                "parent_struc" : dialog.parent_struc,
-                "pvmap" : dialog.pvmap,
-            }
-            if dialog.region:
-                self.model.options["additional"][dialog.name]["region"] = dialog.region
-            if dialog.sigma:
-                self.model.options["additional"][dialog.name]["sigma"] = dialog.sigma
-
+            self.model.options["additional"].update(dialog.strucs)
             self._refresh_gui()
 
 class FastStructureModelView:
