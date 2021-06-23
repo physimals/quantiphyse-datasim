@@ -272,6 +272,8 @@ class UserPvModel(PartialVolumeStructureModel):
                        Will be updated to include embedded structure.
         """
         pv = qpdata.raw()
+        # Valid name for QpData - structure name may contain spaces etc.
+        qpdata_name = self._ivm.suggest_name(struc["name"])
         if "region" in struc:
             # If we are using only a single region of an ROI, zero out all other regions
             pv[pv != struc["region"]] = 0
@@ -281,12 +283,12 @@ class UserPvModel(PartialVolumeStructureModel):
         pv = pv.astype(np.float32)
         if "sigma" in struc:
             # Perform Gaussian smoothing
-            pv = self._smooth_pv(NumpyData(pv, grid=qpdata.grid, name=struc["name"]), struc["sigma"])
+            pv = self._smooth_pv(NumpyData(pv, grid=qpdata.grid, name=qpdata_name), struc["sigma"])
         reweighting = 1-pv
         for name, existing_map in strucs.items():
-            new_map = NumpyData(existing_map.raw() * reweighting, grid=qpdata.grid, name=name)
+            new_map = NumpyData(existing_map.raw() * reweighting, grid=qpdata.grid, name=existing_map.name)
             strucs[name] = new_map
-        strucs[struc["name"]] = NumpyData(pv, grid=qpdata.grid, name=struc["name"])
+        strucs[struc["name"]] = NumpyData(pv, grid=qpdata.grid, name=qpdata_name)
 
     def _smooth_pv(self, qpdata, sigma):
         """
@@ -336,6 +338,7 @@ class UserPvModel(PartialVolumeStructureModel):
         """
         # Activation mask - replace parent structure
         parent_struc = struc.get("parent_struc", None)
+        qpdata_name = self._ivm.suggest_name(struc["name"])
         if parent_struc is None:
             raise QpException("Parent structure not defined for activation mask: %s" % struc["name"])
         elif parent_struc not in strucs:
@@ -360,7 +363,7 @@ class UserPvModel(PartialVolumeStructureModel):
         activation_data *= activation_mask
         parent_data *= (1-activation_mask)
         strucs[parent_struc] = NumpyData(parent_data, grid=parent_qpdata.grid, name=parent_qpdata.name)
-        strucs[struc["name"]] = NumpyData(activation_data, grid=parent_qpdata.grid, name=struc["name"])
+        strucs[struc["name"]] = NumpyData(activation_data, grid=parent_qpdata.grid, name=qpdata_name)
 
 class FastStructureModel(PartialVolumeStructureModel):
     """
