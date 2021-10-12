@@ -14,10 +14,7 @@ import time
 
 import numpy as np
 
-try:
-    from PySide import QtGui, QtCore, QtGui as QtWidgets
-except ImportError:
-    from PySide2 import QtGui, QtCore, QtWidgets
+from PySide2 import QtGui, QtCore, QtWidgets
 
 from quantiphyse.data import NumpyData, DataGrid, ImageVolumeManagement
 from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption, RunButton
@@ -26,7 +23,7 @@ from quantiphyse.processes import Process
 
 from .struc_models import *
 
-class AddEmbeddingDialog(QtGui.QDialog):
+class AddEmbeddingDialog(QtWidgets.QDialog):
     """
     Dialog box enabling one item to be chosen from a list
     """
@@ -39,7 +36,7 @@ class AddEmbeddingDialog(QtGui.QDialog):
         self.existing_names = [struc.name for struc in existing_strucs]
 
         self.setWindowTitle("Add embedding")
-        vbox = QtGui.QVBoxLayout()
+        vbox = QtWidgets.QVBoxLayout()
         self.setLayout(vbox)
 
         self._opts = OptionBox()
@@ -57,10 +54,10 @@ class AddEmbeddingDialog(QtGui.QDialog):
         self._warning.setStyleSheet("color: red;")
         vbox.addWidget(self._warning)
 
-        self.button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+        self.button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
-        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(False)
+        self.button_box.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
         vbox.addWidget(self.button_box)
         self._pvmap_changed()
 
@@ -77,7 +74,7 @@ class AddEmbeddingDialog(QtGui.QDialog):
 
     def _name_changed(self):
         accept = self.name != "" and self.name not in self.existing_names
-        self.button_box.button(QtGui.QDialogButtonBox.Ok).setEnabled(accept)
+        self.button_box.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(accept)
         if self.name and not accept:
             self._warning.setText("Name already exists")
         else:
@@ -207,7 +204,7 @@ class UserPvModelView:
         def _del_cb():
             self._del_struc(add_struc["name"])
 
-        btn = QtGui.QPushButton("Delete")
+        btn = QtWidgets.QPushButton("Delete")
         btn.clicked.connect(_del_cb)
         return btn
 

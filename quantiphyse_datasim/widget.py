@@ -7,10 +7,7 @@ Copyright (c) 2016-2017 University of Oxford, Martin Craig
 
 from __future__ import division, unicode_literals, absolute_import, print_function
 
-try:
-    from PySide import QtGui, QtCore, QtGui as QtWidgets
-except ImportError:
-    from PySide2 import QtGui, QtCore, QtWidgets
+from PySide2 import QtGui, QtCore, QtWidgets
 
 from quantiphyse.gui.widgets import QpWidget, Citation, TitleWidget, RunWidget, WarningBox
 from quantiphyse.gui.options import OptionBox, DataOption, NumericOption, BoolOption, NumberListOption, TextOption, ChoiceOption
@@ -29,15 +26,15 @@ def get_view_class(model_class):
         cls = getattr(struc_model_views, view_name, None)
     return cls
 
-class ParamValuesGrid(QtGui.QGroupBox):
+class ParamValuesGrid(QtWidgets.QGroupBox):
     """
     Widget which presents a grid of values so the user can specify the value of 
     each parameter in each partial volume structure
     """
 
     def __init__(self, title="Parameter Values"):
-        QtGui.QGroupBox.__init__(self, title)
-        self._grid = QtGui.QGridLayout()
+        QtWidgets.QGroupBox.__init__(self, title)
+        self._grid = QtWidgets.QGridLayout()
         self.setLayout(self._grid)
         self._structures = []
         self._params = []
@@ -97,10 +94,10 @@ class ParamValuesGrid(QtGui.QGroupBox):
     def _repopulate(self):
         self._clear()
         for structure_idx, structure in enumerate(self._structures):
-            self._grid.addWidget(QtGui.QLabel(structure.display_name), 0, structure_idx + 1)
+            self._grid.addWidget(QtWidgets.QLabel(structure.display_name), 0, structure_idx + 1)
 
         for param_idx, param in enumerate(self._params):
-            self._grid.addWidget(QtGui.QLabel(param.display_name), param_idx + 1, 0)
+            self._grid.addWidget(QtWidgets.QLabel(param.display_name), param_idx + 1, 0)
             for structure_idx, structure in enumerate(self._structures):
                 # The initial value for a parameter in a structure is the previous value set (if any), 
                 # the default value for that structure (if any), the default value for the parent
@@ -125,12 +122,12 @@ class ParamValuesGrid(QtGui.QGroupBox):
             if child.widget():
                 child.widget().deleteLater()
 
-class OptionsWidget(QtGui.QWidget):
+class OptionsWidget(QtWidgets.QWidget):
 
     sig_changed = QtCore.Signal()
 
     def __init__(self, ivm, parent):
-        QtGui.QWidget.__init__(self, parent)
+        QtWidgets.QWidget.__init__(self, parent)
         self.ivm = ivm
 
 class ModelOptions(OptionsWidget):
@@ -143,7 +140,7 @@ class ModelOptions(OptionsWidget):
         for name, cls in model_classes.items():
             self._views[name] = get_view_class(cls)(ivm)
 
-        main_vbox = QtGui.QVBoxLayout()
+        main_vbox = QtWidgets.QVBoxLayout()
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
@@ -160,7 +157,7 @@ class ModelOptions(OptionsWidget):
         for view in self._views.values():
             if view.gui is not None:
                 view.gui.setVisible(False)
-                if isinstance(view.gui, QtGui.QWidget):
+                if isinstance(view.gui, QtWidgets.QWidget):
                     main_vbox.addWidget(view.gui)
                 else:
                     main_vbox.addLayout(view.gui)
@@ -181,7 +178,7 @@ class NoiseOptions(OptionsWidget):
     def __init__(self, ivm, parent):
         OptionsWidget.__init__(self, ivm, parent)
 
-        main_vbox = QtGui.QVBoxLayout()
+        main_vbox = QtWidgets.QVBoxLayout()
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
@@ -195,7 +192,7 @@ class MotionOptions(OptionsWidget):
     def __init__(self, ivm, parent):
         OptionsWidget.__init__(self, ivm, parent)
 
-        main_vbox = QtGui.QVBoxLayout()
+        main_vbox = QtWidgets.QVBoxLayout()
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
@@ -219,7 +216,7 @@ class ParamsOptions(OptionsWidget):
     def __init__(self, ivm, parent):
         OptionsWidget.__init__(self, ivm, parent)
 
-        main_vbox = QtGui.QVBoxLayout()
+        main_vbox = QtWidgets.QVBoxLayout()
         self.setLayout(main_vbox)
 
         self._params = ParamValuesGrid()
@@ -238,7 +235,7 @@ class OutputOptions(OptionsWidget):
     def __init__(self, ivm, parent):
         OptionsWidget.__init__(self, ivm, parent)
 
-        main_vbox = QtGui.QVBoxLayout()
+        main_vbox = QtWidgets.QVBoxLayout()
         self.setLayout(main_vbox)
 
         self.options = OptionBox()
@@ -258,13 +255,13 @@ class DataSimWidget(QpWidget):
         self._param_values = {}
 
     def init_ui(self):
-        main_vbox = QtGui.QVBoxLayout()
+        main_vbox = QtWidgets.QVBoxLayout()
         self.setLayout(main_vbox)
 
         title = TitleWidget(self, help="generic/datasim", subtitle="Simulates data for various imaging sequences, from known parameter inputs %s" % __version__)
         main_vbox.addWidget(title)
 
-        self.tabs = QtGui.QTabWidget()
+        self.tabs = QtWidgets.QTabWidget()
         main_vbox.addWidget(self.tabs)
 
         self.struc_model = ModelOptions(self.ivm, parent=self, model_type="Structural", abbrev="struc", model_classes=get_struc_models())
